@@ -114,15 +114,15 @@ function TaskItem({ task, onToggle, onDelete, onEdit, onDragStart, onDragOver, o
      
  
       {/* Content */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
         <div style={{
-          fontSize: "14px", fontWeight: 500, color: taskColor === "#ffffff" ? "#e2e8f0" : taskColor,
+          fontSize: "15px", fontWeight: 500, color: taskColor === "#ffffff" ? "#e2e8f0" : taskColor,
           textDecoration: task.completed ? "line-through" : "none",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
           fontFamily: "'DM Sans', sans-serif",
           opacity: task.completed ? 0.6 : 1,
         }}>{task.text}</div>
-        <div style={{ display: "flex", gap: "6px", marginTop: "3px", alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
           <span style={{
             fontSize: "10px", fontWeight: 600, letterSpacing: "0.05em",
             color: p.color, background: p.bg, padding: "1px 7px", borderRadius: "999px",
