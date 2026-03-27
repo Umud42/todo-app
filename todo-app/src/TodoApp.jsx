@@ -449,7 +449,7 @@ export default function TodoApp() {
                       value={input}
                       onChange={e => setInput(e.target.value)}
                       onKeyDown={e => e.key === "Enter" && addTask()}
-                      placeholder="Add a new task… (Press Ctrl+Enter to send)"
+                      placeholder="Add a new task…"
                       style={{
                         flex: 1, height: "42px", padding: "0 14px",
                         background: "rgba(255,255,255,0.08)", border: "0.5px solid rgba(255,255,255,0.12)",
