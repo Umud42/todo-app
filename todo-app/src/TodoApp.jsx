@@ -91,7 +91,10 @@ function TaskItem({ task, onToggle, onDelete, onEdit, onDragStart, onDragOver, o
     <div
       draggable
       onDragStart={() => onDragStart(task.id)}
-      onDragOver={(e) => { e.preventDefault(); onDragOver(task.id); }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (dragOverId !== task.id) onDragOver(task.id);
+      }}
       onDrop={onDrop}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
@@ -288,6 +291,7 @@ export default function TodoApp() {
   useEffect(() => { localStorage.setItem("theme", theme); }, [theme]);
  
   const isDark = theme === "dark";
+  const overlayBg = isDark ? "rgba(0,0,0,0.62)" : "rgba(255,255,255,0.85)";
   const border = "rgba(255,255,255,0.1)";
  
   const addTask = useCallback(() => {
@@ -352,8 +356,7 @@ export default function TodoApp() {
       `}</style>
  
       {/* Dark overlay */}
-      <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.62)", backdropFilter: "blur(2px)" }}>
- 
+      <div style={{ minHeight: "100vh", background: overlayBg, backdropFilter: "blur(2px)" }}> 
         {/* Header */}
         <div style={{
           borderBottom: "0.5px solid rgba(255,255,255,0.08)",
