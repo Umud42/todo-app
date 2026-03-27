@@ -61,25 +61,7 @@ function GripIcon() {
     </svg>
   );
 }
- 
-function SunIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-      <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-    </svg>
-  );
-}
- 
-function MoonIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-    </svg>
-  );
-}
+
  
 function TaskItem({ task, onToggle, onDelete, onEdit, onDragStart, onDragOver, onDrop, isDragging }) {
   const [hovering, setHovering] = useState(false);
@@ -129,12 +111,7 @@ function TaskItem({ task, onToggle, onDelete, onEdit, onDragStart, onDragOver, o
         {task.completed && <CheckIcon />}
       </button>
  
-      {/* Color dot */}
-      <div style={{
-        width: "10px", height: "10px", borderRadius: "50%",
-        background: taskColor, flexShrink: 0,
-        border: taskColor === "#ffffff" ? "1px solid rgba(255,255,255,0.3)" : "none",
-      }} />
+     
  
       {/* Content */}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -174,7 +151,325 @@ function TaskItem({ task, onToggle, onDelete, onEdit, onDragStart, onDragOver, o
     </div>
   );
 }
- 
+// ── Goals Panel ──────────────────────────────────────────────
+function GoalsPanel({ textColor, mutedColor }) {
+  const [goals, setGoals] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("goals_v1")) || []; } catch { return []; }
+  });
+  const [goalInput, setGoalInput] = useState("");
+  const [stepInputs, setStepInputs] = useState({});
+
+  useEffect(() => { localStorage.setItem("goals_v1", JSON.stringify(goals)); }, [goals]);
+
+  const addGoal = () => {
+    const text = goalInput.trim();
+    if (!text) return;
+    setGoals(prev => [...prev, { id: Date.now(), text, steps: [], completed: false }]);
+    setGoalInput("");
+  };
+
+  const deleteGoal = (id) => setGoals(prev => prev.filter(g => g.id !== id));
+
+  const toggleGoal = (id) => setGoals(prev => prev.map(g => g.id === id ? { ...g, completed: !g.completed } : g));
+
+  const addStep = (goalId) => {
+    const text = (stepInputs[goalId] || "").trim();
+    if (!text) return;
+    setGoals(prev => prev.map(g => g.id === goalId ? { ...g, steps: [...g.steps, { id: Date.now(), text, completed: false }] } : g));
+    setStepInputs(prev => ({ ...prev, [goalId]: "" }));
+  };
+
+  const toggleStep = (goalId, stepId) => {
+    setGoals(prev => prev.map(g => g.id === goalId ? {
+      ...g, steps: g.steps.map(s => s.id === stepId ? { ...s, completed: !s.completed } : s)
+    } : g));
+  };
+
+  const deleteStep = (goalId, stepId) => {
+    setGoals(prev => prev.map(g => g.id === goalId ? { ...g, steps: g.steps.filter(s => s.id !== stepId) } : g));
+  };
+
+  return (
+    <div>
+      {/* Goal input */}
+      <div style={{
+        background: "rgba(255,255,255,0.07)", border: "0.5px solid rgba(255,255,255,0.12)",
+        borderRadius: "14px", padding: "14px", marginBottom: "16px", backdropFilter: "blur(12px)",
+      }}>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <input
+            value={goalInput}
+            onChange={e => setGoalInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && addGoal()}
+            placeholder="Yeni hədəf əlavə et..."
+            style={{
+              flex: 1, height: "42px", padding: "0 14px",
+              background: "rgba(255,255,255,0.08)", border: "0.5px solid rgba(255,255,255,0.12)",
+              borderRadius: "10px", color: textColor, fontSize: "14px",
+              fontFamily: "'DM Sans', sans-serif", outline: "none",
+            }}
+            onFocus={e => { e.target.style.borderColor = "#22c55e"; e.target.style.boxShadow = "0 0 0 2px rgba(34,197,94,0.15)"; }}
+            onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.12)"; e.target.style.boxShadow = "none"; }}
+          />
+          <button onClick={addGoal} style={{
+            height: "42px", padding: "0 18px", borderRadius: "10px",
+            background: "#22c55e", border: "none", color: "#fff",
+            fontSize: "14px", fontWeight: 600, cursor: "pointer",
+            fontFamily: "'DM Sans', sans-serif",
+          }}>+ Əlavə et</button>
+        </div>
+      </div>
+
+      {/* Goals list */}
+      {goals.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "50px 0", color: "rgba(255,255,255,0.3)", fontSize: "14px" }}>
+          🎯 Hələ hədəf yoxdur
+        </div>
+      ) : (
+        goals.map(goal => {
+          const doneSteps = goal.steps.filter(s => s.completed).length;
+          const progress = goal.steps.length ? Math.round((doneSteps / goal.steps.length) * 100) : 0;
+          return (
+            <div key={goal.id} style={{
+              background: "rgba(255,255,255,0.06)", border: "0.5px solid rgba(255,255,255,0.1)",
+              borderRadius: "14px", padding: "14px", marginBottom: "12px",
+              backdropFilter: "blur(8px)", animation: "slideIn 0.25s ease",
+            }}>
+              {/* Goal header */}
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <button onClick={() => toggleGoal(goal.id)} style={{
+                  width: "22px", height: "22px", borderRadius: "6px", flexShrink: 0,
+                  border: `2px solid ${goal.completed ? "#22c55e" : "#a855f7"}`,
+                  background: goal.completed ? "#22c55e" : "transparent",
+                  cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  {goal.completed && <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>
+                <span style={{
+                  flex: 1, fontSize: "15px", fontWeight: 600, color: textColor,
+                  textDecoration: goal.completed ? "line-through" : "none",
+                  opacity: goal.completed ? 0.5 : 1,
+                }}>{goal.text}</span>
+                <span style={{ fontSize: "12px", color: "#a855f7", fontWeight: 600 }}>{progress}%</span>
+                <button onClick={() => deleteGoal(goal.id)} style={{
+                  width: "26px", height: "26px", borderRadius: "6px", border: "none",
+                  background: "rgba(244,63,94,0.12)", color: "#f43f5e",
+                  display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                  </svg>
+                </button>
+              </div>
+
+              {/* Progress bar */}
+              {goal.steps.length > 0 && (
+                <div style={{ height: "4px", background: "rgba(255,255,255,0.1)", borderRadius: "999px", overflow: "hidden", marginBottom: "10px" }}>
+                  <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#7c3aed,#a855f7)", borderRadius: "999px", transition: "width 0.4s" }} />
+                </div>
+              )}
+
+              {/* Steps */}
+              {goal.steps.map(step => (
+                <div key={step.id} style={{
+                  display: "flex", alignItems: "center", gap: "8px",
+                  padding: "7px 10px", marginBottom: "5px",
+                  background: "rgba(255,255,255,0.04)", borderRadius: "8px",
+                }}>
+                  <button onClick={() => toggleStep(goal.id, step.id)} style={{
+                    width: "16px", height: "16px", borderRadius: "4px", flexShrink: 0,
+                    border: `1.5px solid ${step.completed ? "#22c55e" : "rgba(255,255,255,0.3)"}`,
+                    background: step.completed ? "#22c55e" : "transparent",
+                    cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    {step.completed && <svg width="8" height="8" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </button>
+                  <span style={{
+                    flex: 1, fontSize: "13px", color: "rgba(255,255,255,0.7)",
+                    textDecoration: step.completed ? "line-through" : "none",
+                    opacity: step.completed ? 0.5 : 1,
+                  }}>{step.text}</span>
+                  <button onClick={() => deleteStep(goal.id, step.id)} style={{
+                    width: "20px", height: "20px", borderRadius: "4px", border: "none",
+                    background: "transparent", color: "rgba(244,63,94,0.6)",
+                    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "14px",
+                  }}>×</button>
+                </div>
+              ))}
+
+              {/* Add step */}
+              <div style={{ display: "flex", gap: "6px", marginTop: "8px" }}>
+                <input
+                  value={stepInputs[goal.id] || ""}
+                  onChange={e => setStepInputs(prev => ({ ...prev, [goal.id]: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && addStep(goal.id)}
+                  placeholder="Addım əlavə et..."
+                  style={{
+                    flex: 1, height: "34px", padding: "0 12px",
+                    background: "rgba(255,255,255,0.06)", border: "0.5px solid rgba(255,255,255,0.1)",
+                    borderRadius: "8px", color: textColor, fontSize: "13px",
+                    fontFamily: "'DM Sans', sans-serif", outline: "none",
+                  }}
+                />
+                <button onClick={() => addStep(goal.id)} style={{
+                  height: "34px", padding: "0 14px", borderRadius: "8px",
+                  background: "rgba(168,85,247,0.2)", border: "0.5px solid rgba(168,85,247,0.3)",
+                  color: "#a855f7", fontSize: "13px", fontWeight: 600, cursor: "pointer",
+                  fontFamily: "'DM Sans', sans-serif",
+                }}>+ Addım</button>
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+} 
+
+// ── Budget Panel ──────────────────────────────────────────────
+function BudgetPanel({ textColor, mutedColor }) {
+  const [transactions, setTransactions] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("budget_v1")) || []; } catch { return []; }
+  });
+  const [desc, setDesc] = useState("");
+  const [amount, setAmount] = useState("");
+  const [type, setType] = useState("income");
+
+  useEffect(() => { localStorage.setItem("budget_v1", JSON.stringify(transactions)); }, [transactions]);
+
+  const addTransaction = () => {
+    const text = desc.trim();
+    const num = parseFloat(amount);
+    if (!text || isNaN(num) || num <= 0) return;
+    setTransactions(prev => [...prev, { id: Date.now(), text, amount: num, type, date: new Date().toISOString() }]);
+    setDesc(""); setAmount("");
+  };
+
+  const deleteTransaction = (id) => setTransactions(prev => prev.filter(t => t.id !== id));
+
+  const totalIncome = transactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const totalExpense = transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const balance = totalIncome - totalExpense;
+
+  return (
+    <div>
+      {/* Summary cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "16px" }}>
+        {[
+          { label: "Balans", value: balance, color: balance >= 0 ? "#22c55e" : "#f43f5e" },
+          { label: "Gəlir", value: totalIncome, color: "#22c55e" },
+          { label: "Xərc", value: totalExpense, color: "#f43f5e" },
+        ].map(card => (
+          <div key={card.label} style={{
+            background: "rgba(255,255,255,0.06)", border: "0.5px solid rgba(255,255,255,0.1)",
+            borderRadius: "12px", padding: "12px", textAlign: "center", backdropFilter: "blur(8px)",
+          }}>
+            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "4px" }}>{card.label}</div>
+            <div style={{ fontSize: "18px", fontWeight: 700, color: card.color }}>
+              {card.value.toFixed(2)} ₼
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Input */}
+      <div style={{
+        background: "rgba(255,255,255,0.07)", border: "0.5px solid rgba(255,255,255,0.12)",
+        borderRadius: "14px", padding: "14px", marginBottom: "16px", backdropFilter: "blur(12px)",
+      }}>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+          <input
+            value={desc}
+            onChange={e => setDesc(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && addTransaction()}
+            placeholder="Açıqlama..."
+            style={{
+              flex: 1, height: "40px", padding: "0 12px",
+              background: "rgba(255,255,255,0.08)", border: "0.5px solid rgba(255,255,255,0.12)",
+              borderRadius: "10px", color: textColor, fontSize: "14px",
+              fontFamily: "'DM Sans', sans-serif", outline: "none",
+            }}
+            onFocus={e => { e.target.style.borderColor = "#22c55e"; e.target.style.boxShadow = "0 0 0 2px rgba(34,197,94,0.15)"; }}
+            onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.12)"; e.target.style.boxShadow = "none"; }}
+          />
+          <input
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && addTransaction()}
+            placeholder="Məbləğ"
+            type="number"
+            style={{
+              width: "100px", height: "40px", padding: "0 12px",
+              background: "rgba(255,255,255,0.08)", border: "0.5px solid rgba(255,255,255,0.12)",
+              borderRadius: "10px", color: textColor, fontSize: "14px",
+              fontFamily: "'DM Sans', sans-serif", outline: "none",
+            }}
+            onFocus={e => { e.target.style.borderColor = "#22c55e"; e.target.style.boxShadow = "0 0 0 2px rgba(34,197,94,0.15)"; }}
+            onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.12)"; e.target.style.boxShadow = "none"; }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: "8px" }}>
+          {["income", "expense"].map(t => (
+            <button key={t} onClick={() => setType(t)} style={{
+              flex: 1, height: "36px", borderRadius: "8px", cursor: "pointer",
+              border: `0.5px solid ${type === t ? (t === "income" ? "#22c55e" : "#f43f5e") : "rgba(255,255,255,0.15)"}`,
+              background: type === t ? (t === "income" ? "rgba(34,197,94,0.12)" : "rgba(244,63,94,0.12)") : "transparent",
+              color: type === t ? (t === "income" ? "#22c55e" : "#f43f5e") : "rgba(255,255,255,0.4)",
+              fontSize: "13px", fontWeight: 600, fontFamily: "'DM Sans', sans-serif",
+            }}>{t === "income" ? "💚 Gəlir" : "🔴 Xərc"}</button>
+          ))}
+          <button onClick={addTransaction} style={{
+            height: "36px", padding: "0 16px", borderRadius: "8px",
+            background: "#22c55e", border: "none", color: "#fff",
+            fontSize: "13px", fontWeight: 600, cursor: "pointer",
+            fontFamily: "'DM Sans', sans-serif",
+          }}>+ Əlavə et</button>
+        </div>
+      </div>
+
+      {/* Transactions list */}
+      {transactions.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "50px 0", color: "rgba(255,255,255,0.3)", fontSize: "14px" }}>
+          💰 Hələ əməliyyat yoxdur
+        </div>
+      ) : (
+        [...transactions].reverse().map(t => (
+          <div key={t.id} style={{
+            display: "flex", alignItems: "center", gap: "10px",
+            padding: "12px 14px", marginBottom: "8px",
+            background: "rgba(255,255,255,0.06)", border: "0.5px solid rgba(255,255,255,0.1)",
+            borderRadius: "12px", backdropFilter: "blur(8px)", animation: "slideIn 0.25s ease",
+          }}>
+            <div style={{
+              width: "32px", height: "32px", borderRadius: "8px", flexShrink: 0,
+              background: t.type === "income" ? "rgba(34,197,94,0.15)" : "rgba(244,63,94,0.15)",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px",
+            }}>{t.type === "income" ? "💚" : "🔴"}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "14px", fontWeight: 500, color: textColor }}>{t.text}</div>
+              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", fontFamily: "monospace" }}>
+                {new Date(t.date).toLocaleDateString("az-AZ", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+              </div>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 700, color: t.type === "income" ? "#22c55e" : "#f43f5e" }}>
+              {t.type === "income" ? "+" : "-"}{t.amount.toFixed(2)} ₼
+            </div>
+            <button onClick={() => deleteTransaction(t.id)} style={{
+              width: "26px", height: "26px", borderRadius: "6px", border: "none",
+              background: "rgba(244,63,94,0.12)", color: "#f43f5e",
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+            }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+              </svg>
+            </button>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 // ── Notes Panel ──────────────────────────────────────────────
 function NotesPanel() {
   const [notes, setNotes] = useState(() => {
@@ -289,6 +584,8 @@ export default function TodoApp() {
  
   const isDark = theme === "dark";
   const border = "rgba(255,255,255,0.1)";
+  const textColor = "#e2e8f0";
+  const mutedColor = "rgba(255,255,255,0.4)";
  
   const addTask = useCallback(() => {
     const text = input.trim();
@@ -365,17 +662,7 @@ export default function TodoApp() {
             <div style={{ fontSize: "12px", color: "#22c55e", fontWeight: 600, letterSpacing: "0.08em", fontFamily: "'DM Mono', monospace" }}>{time}</div>
             <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", marginTop: "1px" }}>{formatDate()}</div>
           </div>
-          <button
-            onClick={() => setTheme(isDark ? "light" : "dark")}
-            style={{
-              width: "38px", height: "38px", borderRadius: "10px",
-              border: "0.5px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.07)",
-              color: "rgba(255,255,255,0.6)", display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: "pointer",
-            }}
-          >
-            {isDark ? <SunIcon /> : <MoonIcon />}
-          </button>
+          
         </div>
  
         {/* Main layout */}
@@ -392,6 +679,8 @@ export default function TodoApp() {
             {[
               { key: "tasks", label: "My Tasks", emoji: "✅" },
               { key: "notes", label: "Notes", emoji: "📝" },
+              { key: "goals", label: "Goals", emoji: "🎯" },
+              { key: "budget", label: "Budget", emoji: "💰" },
             ].map(item => (
               <button key={item.key} onClick={() => setActivePanel(item.key)} style={{
                 width: "100%", height: "44px", borderRadius: "12px",
@@ -422,9 +711,18 @@ export default function TodoApp() {
                     <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#16a34a,#22c55e)", borderRadius: "999px", transition: "width 0.4s" }} />
                   </div>
                   <div style={{ marginTop: "10px", fontSize: "12px", color: "rgba(255,255,255,0.35)", lineHeight: 1.8 }}>
-                    <div>Total: <strong style={{ color: "#e2e8f0" }}>{tasks.length}</strong></div>
-                    <div>Active: <strong style={{ color: "#f59e0b" }}>{tasks.filter(t => !t.completed).length}</strong></div>
-                    <div>Done: <strong style={{ color: "#22c55e" }}>{completedCount}</strong></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", height: "22px", alignItems: "center" }}>
+                    <span>Total</span>
+                    <strong style={{ color: "#e2e8f0" }}>{tasks.length}</strong>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", height: "22px", alignItems: "center" }}>
+                   <span>Active</span>
+                   <strong style={{ color: "#f59e0b" }}>{tasks.filter(t => !t.completed).length}</strong>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", height: "22px", alignItems: "center" }}>
+                   <span>Done</span>
+                   <strong style={{ color: "#22c55e" }}>{completedCount}</strong>
+                  </div>
                   </div>
                 </div>
               </div>
@@ -551,6 +849,18 @@ export default function TodoApp() {
               <div style={{ maxWidth: "640px" }}>
                 <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#fff", marginBottom: "20px" }}>Notes</h1>
                 <NotesPanel />
+              </div>
+            )}  
+            {activePanel === "goals" && (
+              <div style={{ maxWidth: "640px" }}>
+                <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#fff", marginBottom: "20px" }}>🎯 Goals</h1>
+                <GoalsPanel textColor="#e2e8f0" mutedColor="rgba(255,255,255,0.4)" />
+              </div>
+            )}
+            {activePanel === "budget" && (
+              <div style={{ maxWidth: "640px" }}>
+                <h1 style={{ fontSize: "24px", fontWeight: 700, color: textColor, marginBottom: "20px" }}>💰 Budget</h1>
+                <BudgetPanel textColor={textColor} mutedColor={mutedColor} />
               </div>
             )}
           </div>
