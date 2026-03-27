@@ -204,7 +204,7 @@ function NotesPanel() {
           value={noteInput}
           onChange={e => setNoteInput(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter" && e.ctrlKey) addNote(); }}
-          placeholder="Notunu yaz... (Ctrl+Enter göndər)"
+          placeholder="Type your note… (Press Ctrl+Enter to send)"
           rows={4}
           style={{
             width: "100%", background: "rgba(255,255,255,0.06)",
@@ -221,14 +221,14 @@ function NotesPanel() {
           background: "#22c55e", border: "none", color: "#fff",
           fontSize: "14px", fontWeight: 600, cursor: "pointer",
           fontFamily: "'DM Sans', sans-serif",
-        }}>+ Not əlavə et</button>
+        }}>+ Add note</button>
       </div>
  
       {/* Notes list */}
       <div style={{ flex: 1, overflowY: "auto" }}>
         {notes.length === 0 ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: "rgba(255,255,255,0.3)", fontSize: "14px" }}>
-            📝 Hələ not yoxdur
+            📝 Your notes will appear here
           </div>
         ) : (
           notes.map(note => (
@@ -412,7 +412,7 @@ export default function TodoApp() {
             {/* Stats */}
             {activePanel === "tasks" && tasks.length > 0 && (
               <div style={{ marginTop: "24px" }}>
-                <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em", fontWeight: 600, marginBottom: "12px" }}>STATISTIKA</div>
+                <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em", fontWeight: 600, marginBottom: "12px" }}>STATS</div>
                 <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "12px", padding: "14px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
                     <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>Completed:</span>
@@ -464,7 +464,7 @@ export default function TodoApp() {
                       background: "#22c55e", border: "none", color: "#fff",
                       fontSize: "14px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
                       fontFamily: "'DM Sans', sans-serif",
-                    }}>+ Əlavə et</button>
+                    }}>+ Add</button>
                   </div>
  
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
@@ -490,7 +490,7 @@ export default function TodoApp() {
  
                     {/* Color picker */}
                     <div style={{ display: "flex", alignItems: "center", gap: "5px", marginLeft: "4px" }}>
-                      <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>Rəng:</span>
+                      <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>Color:</span>
                       {TASK_COLORS.map(c => (
                         <button key={c} onClick={() => setTaskColor(c)} style={{
                           width: "18px", height: "18px", borderRadius: "50%", background: c,
@@ -521,7 +521,7 @@ export default function TodoApp() {
                       border: "0.5px solid rgba(244,63,94,0.3)", background: "transparent",
                       color: "#f43f5e", fontSize: "13px", cursor: "pointer",
                       fontFamily: "'DM Sans', sans-serif", marginLeft: "auto",
-                    }}>Remove completed ones</button>
+                    }}>Remove completed tasks</button>
                   )}
                 </div>
  
@@ -530,7 +530,7 @@ export default function TodoApp() {
                   {filtered.length === 0 ? (
                     <div style={{ textAlign: "center", padding: "50px 0", color: "rgba(255,255,255,0.3)" }}>
                       <div style={{ fontSize: "36px", marginBottom: "10px" }}>✓</div>
-                      <div style={{ fontSize: "14px" }}>Task yoxdur</div>
+                      <div style={{ fontSize: "14px" }}>No tasks yet</div>
                     </div>
                   ) : (
                     filtered.map(task => (
@@ -569,7 +569,7 @@ export default function TodoApp() {
             borderRadius: "18px", padding: "24px", width: "100%", maxWidth: "420px",
             boxShadow: "0 20px 60px rgba(0,0,0,0.6)", animation: "slideIn 0.2s ease",
           }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#fff", marginBottom: "16px" }}>Taskı düzəlt</h3>
+            <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#fff", marginBottom: "16px" }}>Edit task</h3>
             <input
               autoFocus value={editText}
               onChange={e => setEditText(e.target.value)}
@@ -584,7 +584,7 @@ export default function TodoApp() {
             />
             {/* Color picker in edit */}
             <div style={{ marginBottom: "16px" }}>
-              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", marginBottom: "8px" }}>Rəng seç:</div>
+              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", marginBottom: "8px" }}>Choose a color:</div>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                 {TASK_COLORS.map(c => (
                   <button key={c} onClick={() => setEditColor(c)} style={{
@@ -601,13 +601,13 @@ export default function TodoApp() {
                 border: "0.5px solid rgba(255,255,255,0.15)", background: "transparent",
                 color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: "14px",
                 fontFamily: "'DM Sans', sans-serif",
-              }}>Ləğv et</button>
+              }}>Cancel</button>
               <button onClick={saveEdit} style={{
                 height: "38px", padding: "0 20px", borderRadius: "8px",
                 background: "#22c55e", border: "none", color: "#fff",
                 cursor: "pointer", fontSize: "14px", fontWeight: 600,
                 fontFamily: "'DM Sans', sans-serif",
-              }}>Saxla</button>
+              }}>Save</button>
             </div>
           </div>
         </div>
