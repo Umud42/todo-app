@@ -291,8 +291,9 @@ export default function TodoApp() {
   useEffect(() => { localStorage.setItem("theme", theme); }, [theme]);
  
   const isDark = theme === "dark";
-  const overlayBg = isDark ? "rgba(0,0,0,0.62)" : "rgba(255,255,255,0.85)";
-  const border = "rgba(255,255,255,0.1)";
+  const overlayBg = isDark 
+  ? "rgba(0,0,0,0.62)" 
+  : "rgba(255,255,255,0.5)";  const border = "rgba(255,255,255,0.1)";
  
   const addTask = useCallback(() => {
     const text = input.trim();
