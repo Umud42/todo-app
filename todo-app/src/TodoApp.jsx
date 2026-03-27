@@ -415,16 +415,16 @@ export default function TodoApp() {
                 <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em", fontWeight: 600, marginBottom: "12px" }}>STATISTIKA</div>
                 <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "12px", padding: "14px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                    <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>Tamamlandı</span>
+                    <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>Completed:</span>
                     <span style={{ fontSize: "12px", fontWeight: 600, color: "#22c55e" }}>{progress}%</span>
                   </div>
                   <div style={{ height: "4px", background: "rgba(255,255,255,0.1)", borderRadius: "999px", overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#16a34a,#22c55e)", borderRadius: "999px", transition: "width 0.4s" }} />
                   </div>
                   <div style={{ marginTop: "10px", fontSize: "12px", color: "rgba(255,255,255,0.35)", lineHeight: 1.8 }}>
-                    <div>Cəmi: <strong style={{ color: "#e2e8f0" }}>{tasks.length}</strong></div>
-                    <div>Aktiv: <strong style={{ color: "#f59e0b" }}>{tasks.filter(t => !t.completed).length}</strong></div>
-                    <div>Bitmiş: <strong style={{ color: "#22c55e" }}>{completedCount}</strong></div>
+                    <div>Total: <strong style={{ color: "#e2e8f0" }}>{tasks.length}</strong></div>
+                    <div>Active: <strong style={{ color: "#f59e0b" }}>{tasks.filter(t => !t.completed).length}</strong></div>
+                    <div>Done: <strong style={{ color: "#22c55e" }}>{completedCount}</strong></div>
                   </div>
                 </div>
               </div>
@@ -521,7 +521,7 @@ export default function TodoApp() {
                       border: "0.5px solid rgba(244,63,94,0.3)", background: "transparent",
                       color: "#f43f5e", fontSize: "13px", cursor: "pointer",
                       fontFamily: "'DM Sans', sans-serif", marginLeft: "auto",
-                    }}>Bitənləri sil</button>
+                    }}>Remove completed ones</button>
                   )}
                 </div>
  
