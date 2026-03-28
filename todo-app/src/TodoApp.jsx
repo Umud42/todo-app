@@ -334,6 +334,7 @@ function BudgetPanel({ textColor, mutedColor }) {
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
   const [type, setType] = useState("income");
+  const [currency, setCurrency] = useState("$"); {currency}
 
   useEffect(() => { localStorage.setItem("budget_v1", JSON.stringify(transactions)); }, [transactions]);
 
@@ -353,12 +354,32 @@ function BudgetPanel({ textColor, mutedColor }) {
 
   return (
     <div>
+      {/* Currency selector */}
+      <div style={{ display: "flex", gap: "6px", marginBottom: "14px", flexWrap: "wrap" }}>
+      {[
+        { symbol: "$", name: "US Dollar" },
+        { symbol: "€", name: "Euro" },
+        { symbol: "£", name: "British Pound" },
+        { symbol: "₼", name: "Azerbaijani Manat" },
+        { symbol: "₺", name: "Turkish Lira" },
+        { symbol: "₽", name: "Russian Ruble" },
+      ].map(c => (
+        <button key={c.symbol} onClick={() => setCurrency(c.symbol)} title={c.name} style={{
+          height: "30px", padding: "0 14px", borderRadius: "8px",
+          border: `0.5px solid ${currency === c.symbol ? "#22c55e" : "rgba(255,255,255,0.15)"}`,
+          background: currency === c.symbol ? "rgba(34,197,94,0.12)" : "transparent",
+          color: currency === c.symbol ? "#22c55e" : "rgba(255,255,255,0.45)",
+          fontSize: "13px", fontWeight: currency === c.symbol ? 600 : 400,
+          cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+        }}>{c.symbol}</button>
+      ))}
+    </div>
       {/* Summary cards */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "16px" }}>
         {[
-          { label: "Balans", value: balance, color: balance >= 0 ? "#22c55e" : "#f43f5e" },
           { label: "Gəlir", value: totalIncome, color: "#22c55e" },
           { label: "Xərc", value: totalExpense, color: "#f43f5e" },
+          { label: "Balans", value: balance, color: balance >= 0 ? "#22c55e" : "#f43f5e" },
         ].map(card => (
           <div key={card.label} style={{
             background: "rgba(255,255,255,0.06)", border: "0.5px solid rgba(255,255,255,0.1)",
@@ -366,7 +387,7 @@ function BudgetPanel({ textColor, mutedColor }) {
           }}>
             <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "4px" }}>{card.label}</div>
             <div style={{ fontSize: "18px", fontWeight: 700, color: card.color }}>
-              {card.value.toFixed(2)} ₼
+              {card.value.toFixed(2)} {currency}
             </div>
           </div>
         ))}
@@ -398,6 +419,7 @@ function BudgetPanel({ textColor, mutedColor }) {
             onKeyDown={e => e.key === "Enter" && addTransaction()}
             placeholder="Məbləğ"
             type="number"
+            step="50"
             style={{
               width: "100px", height: "40px", padding: "0 12px",
               background: "rgba(255,255,255,0.08)", border: "0.5px solid rgba(255,255,255,0.12)",
@@ -416,7 +438,7 @@ function BudgetPanel({ textColor, mutedColor }) {
               background: type === t ? (t === "income" ? "rgba(34,197,94,0.12)" : "rgba(244,63,94,0.12)") : "transparent",
               color: type === t ? (t === "income" ? "#22c55e" : "#f43f5e") : "rgba(255,255,255,0.4)",
               fontSize: "13px", fontWeight: 600, fontFamily: "'DM Sans', sans-serif",
-            }}>{t === "income" ? "💚 Gəlir" : "🔴 Xərc"}</button>
+            }}>{t === "income" ? "🟢 Gəlir" : "🔴 Xərc"}</button>
           ))}
           <button onClick={addTransaction} style={{
             height: "36px", padding: "0 16px", borderRadius: "8px",
@@ -444,7 +466,7 @@ function BudgetPanel({ textColor, mutedColor }) {
               width: "32px", height: "32px", borderRadius: "8px", flexShrink: 0,
               background: t.type === "income" ? "rgba(34,197,94,0.15)" : "rgba(244,63,94,0.15)",
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px",
-            }}>{t.type === "income" ? "💚" : "🔴"}</div>
+            }}>{t.type === "income" ? "🟢" : "🔴"}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: "14px", fontWeight: 500, color: textColor }}>{t.text}</div>
               <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", fontFamily: "monospace" }}>
@@ -452,7 +474,7 @@ function BudgetPanel({ textColor, mutedColor }) {
               </div>
             </div>
             <div style={{ fontSize: "15px", fontWeight: 700, color: t.type === "income" ? "#22c55e" : "#f43f5e" }}>
-              {t.type === "income" ? "+" : "-"}{t.amount.toFixed(2)} ₼
+              {t.type === "income" ? "+" : "-"}{t.amount.toFixed(2)} {currency}
             </div>
             <button onClick={() => deleteTransaction(t.id)} style={{
               width: "26px", height: "26px", borderRadius: "6px", border: "none",
