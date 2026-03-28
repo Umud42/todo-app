@@ -24,7 +24,47 @@ function formatTime() {
     hour: "2-digit", minute: "2-digit",
   });
 }
- 
+function filterByPeriod(items, period, dateKey) {
+  const now = new Date();
+  return items.filter(item => {
+    const d = new Date(item[dateKey]);
+    if (period === "today") {
+      return d.toDateString() === now.toDateString();
+    }
+    if (period === "week") {
+      const start = new Date(now);
+      start.setDate(now.getDate() - now.getDay());
+      start.setHours(0, 0, 0, 0);
+      return d >= start;
+    }
+    if (period === "month") {
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }
+    return true;
+  });
+}
+function PeriodSelector({ period, onChange }) {
+  const periods = [
+    { key: "all", label: "All time" },
+    { key: "month", label: "This month" },
+    { key: "week", label: "This week" },
+    { key: "today", label: "Today" },
+  ];
+  return (
+    <div style={{ display: "flex", gap: "6px", marginBottom: "16px", flexWrap: "wrap" }}>
+      {periods.map(p => (
+        <button key={p.key} onClick={() => onChange(p.key)} style={{
+          height: "30px", padding: "0 14px", borderRadius: "999px",
+          border: `0.5px solid ${period === p.key ? "#22c55e" : "rgba(255,255,255,0.15)"}`,
+          background: period === p.key ? "rgba(34,197,94,0.1)" : "transparent",
+          color: period === p.key ? "#22c55e" : "rgba(255,255,255,0.45)",
+          fontSize: "12px", fontWeight: period === p.key ? 600 : 400,
+          cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s",
+        }}>{p.label}</button>
+      ))}
+    </div>
+  );
+} 
 function CheckIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -72,7 +112,8 @@ function TaskItem({ task, onToggle, onDelete, onEdit, onDragStart, onDragOver, o
   return (
     <div
       draggable
-      onDragStart={() => onDragStart(task.id)}
+      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; onDragStart(task.id); }}
+      onDragEnd={() => onDragStart(null)}
       onDragOver={(e) => { e.preventDefault(); onDragOver(task.id); }}
       onDrop={onDrop}
       onMouseEnter={() => setHovering(true)}
@@ -129,7 +170,7 @@ function TaskItem({ task, onToggle, onDelete, onEdit, onDragStart, onDragOver, o
           }}>{p.label.toUpperCase()}</span>
           {task.dueDate && (
             <span style={{ fontSize: "10px", color: isOverdue ? "#f43f5e" : "rgba(255,255,255,0.4)", fontFamily: "monospace" }}>
-              {isOverdue ? "⚠ " : "📅 "}{task.dueDate}
+              {isOverdue ? "⚠ " : "📅 "}{task.dueDate ? new Date(task.dueDate + "T00:00:00").toLocaleDateString("az-AZ", { day: "2-digit", month: "2-digit", year: "numeric" }) : ""}
             </span>
           )}
         </div>
@@ -152,7 +193,7 @@ function TaskItem({ task, onToggle, onDelete, onEdit, onDragStart, onDragOver, o
   );
 }
 // ── Goals Panel ──────────────────────────────────────────────
-function GoalsPanel({ textColor, mutedColor }) {
+function GoalsPanel({ textColor, mutedColor, period, onPeriodChange }) {
   const [goals, setGoals] = useState(() => {
     try { return JSON.parse(localStorage.getItem("goals_v1")) || []; } catch { return []; }
   });
@@ -161,7 +202,16 @@ function GoalsPanel({ textColor, mutedColor }) {
 
   useEffect(() => { localStorage.setItem("goals_v1", JSON.stringify(goals)); }, [goals]);
 
-  const addGoal = () => {
+  const filteredGoals = filterByPeriod(goals, period, "createdAt");
+
+  const totalProgress = goals.length === 0 ? 0 : Math.round(
+    goals.reduce((sum, goal) => {
+      if (goal.steps.length === 0) return sum + (goal.completed ? 100 : 0);
+      const done = goal.steps.filter(s => s.completed).length;
+      return sum + Math.round((done / goal.steps.length) * 100);
+    }, 0) / goals.length
+  );
+    const addGoal = () => {
     const text = goalInput.trim();
     if (!text) return;
     setGoals(prev => [...prev, { id: Date.now(), text, steps: [], completed: false }]);
@@ -191,6 +241,34 @@ function GoalsPanel({ textColor, mutedColor }) {
 
   return (
     <div>
+     <PeriodSelector period={period} onChange={onPeriodChange} />
+      {/* Total progress */}
+      {goals.length > 0 && (
+        <div style={{
+          background: "rgba(168,85,247,0.08)", border: "0.5px solid rgba(168,85,247,0.2)",
+          borderRadius: "14px", padding: "16px", marginBottom: "16px",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+            <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)" }}>Overall progress</span>
+            <span style={{ fontSize: "20px", fontWeight: 700, color: "#a855f7" }}>{totalProgress}%</span>
+          </div>
+          <div style={{ height: "6px", background: "rgba(255,255,255,0.08)", borderRadius: "999px", overflow: "hidden" }}>
+            <div style={{
+              height: "100%", width: `${totalProgress}%`,
+              background: "linear-gradient(90deg,#7c3aed,#a855f7)",
+              borderRadius: "999px", transition: "width 0.5s ease",
+            }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
+            <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)" }}>
+              {goals.filter(g => g.completed).length} of {goals.length} goals done
+            </span>
+            <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)" }}>
+              {goals.reduce((s, g) => s + g.steps.filter(st => st.completed).length, 0)} of {goals.reduce((s, g) => s + g.steps.length, 0)} steps done
+            </span>
+          </div>
+        </div>
+      )}
       {/* Goal input */}
       <div style={{
         background: "rgba(255,255,255,0.07)", border: "0.5px solid rgba(255,255,255,0.12)",
@@ -221,12 +299,13 @@ function GoalsPanel({ textColor, mutedColor }) {
       </div>
 
       {/* Goals list */}
-      {goals.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "50px 0", color: "rgba(255,255,255,0.3)", fontSize: "14px" }}>
-          🎯 Hələ hədəf yoxdur
-        </div>
-      ) : (
-        goals.map(goal => {
+      {filteredGoals.length === 0 ? (
+    <div style={{ textAlign: "center", padding: "50px 0", color: "rgba(255,255,255,0.3)", fontSize: "14px" }}>
+      🎯 Hələ hədəf yoxdur
+    </div>
+    ) : (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "12px" }}>
+      {filteredGoals.map(goal => {
           const doneSteps = goal.steps.filter(s => s.completed).length;
           const progress = goal.steps.length ? Math.round((doneSteps / goal.steps.length) * 100) : 0;
           return (
@@ -249,6 +328,8 @@ function GoalsPanel({ textColor, mutedColor }) {
                   flex: 1, fontSize: "15px", fontWeight: 600, color: textColor,
                   textDecoration: goal.completed ? "line-through" : "none",
                   opacity: goal.completed ? 0.5 : 1,
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  minWidth: 0,
                 }}>{goal.text}</span>
                 <span style={{ fontSize: "12px", color: "#a855f7", fontWeight: 600 }}>{progress}%</span>
                 <button onClick={() => deleteGoal(goal.id)} style={{
@@ -288,6 +369,8 @@ function GoalsPanel({ textColor, mutedColor }) {
                     flex: 1, fontSize: "13px", color: "rgba(255,255,255,0.7)",
                     textDecoration: step.completed ? "line-through" : "none",
                     opacity: step.completed ? 0.5 : 1,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    minWidth: 0,
                   }}>{step.text}</span>
                   <button onClick={() => deleteStep(goal.id, step.id)} style={{
                     width: "20px", height: "20px", borderRadius: "4px", border: "none",
@@ -320,21 +403,23 @@ function GoalsPanel({ textColor, mutedColor }) {
               </div>
             </div>
           );
-        })
+        })}
+        </div>
       )}
     </div>
   );
 } 
 
 // ── Budget Panel ──────────────────────────────────────────────
-function BudgetPanel({ textColor, mutedColor }) {
+function BudgetPanel({ textColor, mutedColor, period, onPeriodChange }) {
   const [transactions, setTransactions] = useState(() => {
     try { return JSON.parse(localStorage.getItem("budget_v1")) || []; } catch { return []; }
   });
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
   const [type, setType] = useState("income");
-  const [currency, setCurrency] = useState("$"); {currency}
+  const [currency, setCurrency] = useState("$");
+  const [showCurrencyMenu, setShowCurrencyMenu] = useState(false);
 
   useEffect(() => { localStorage.setItem("budget_v1", JSON.stringify(transactions)); }, [transactions]);
 
@@ -347,33 +432,61 @@ function BudgetPanel({ textColor, mutedColor }) {
   };
 
   const deleteTransaction = (id) => setTransactions(prev => prev.filter(t => t.id !== id));
-
-  const totalIncome = transactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const totalExpense = transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const filteredTransactions = filterByPeriod(transactions, period, "date");
+  const totalIncome = filteredTransactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const totalExpense = filteredTransactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
   const balance = totalIncome - totalExpense;
-
   return (
     <div>
+      <PeriodSelector period={period} onChange={onPeriodChange} />
       {/* Currency selector */}
-      <div style={{ display: "flex", gap: "6px", marginBottom: "14px", flexWrap: "wrap" }}>
-      {[
-        { symbol: "$", name: "US Dollar" },
-        { symbol: "€", name: "Euro" },
-        { symbol: "£", name: "British Pound" },
-        { symbol: "₼", name: "Azerbaijani Manat" },
-        { symbol: "₺", name: "Turkish Lira" },
-        { symbol: "₽", name: "Russian Ruble" },
-      ].map(c => (
-        <button key={c.symbol} onClick={() => setCurrency(c.symbol)} title={c.name} style={{
-          height: "30px", padding: "0 14px", borderRadius: "8px",
-          border: `0.5px solid ${currency === c.symbol ? "#22c55e" : "rgba(255,255,255,0.15)"}`,
-          background: currency === c.symbol ? "rgba(34,197,94,0.12)" : "transparent",
-          color: currency === c.symbol ? "#22c55e" : "rgba(255,255,255,0.45)",
-          fontSize: "13px", fontWeight: currency === c.symbol ? 600 : 400,
-          cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-        }}>{c.symbol}</button>
-      ))}
-    </div>
+      <div style={{ position: "relative", marginBottom: "14px", display: "inline-block" }}>
+        <button onClick={() => setShowCurrencyMenu(m => !m)} style={{
+          height: "36px", padding: "0 14px", borderRadius: "8px",
+          border: "0.5px solid rgba(255,255,255,0.15)",
+          background: "rgba(255,255,255,0.07)", color: "#e2e8f0",
+          fontSize: "14px", fontWeight: 600, cursor: "pointer",
+          display: "flex", alignItems: "center", gap: "8px",
+          fontFamily: "'DM Sans', sans-serif",
+        }}>
+          {currency} <span style={{ fontSize: "10px", opacity: 0.6 }}>▼</span>
+        </button>
+        {showCurrencyMenu && (
+          <div style={{
+            position: "absolute", top: "42px", left: 0, zIndex: 50,
+            background: "#0f172a", border: "0.5px solid rgba(255,255,255,0.15)",
+            borderRadius: "12px", padding: "6px", minWidth: "200px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          }}>
+            {[
+              { symbol: "$", name: "US Dollar" },
+              { symbol: "€", name: "Euro" },
+              { symbol: "£", name: "British Pound" },
+              { symbol: "¥", name: "Japanese Yen" },
+              { symbol: "₼", name: "Azerbaijani Manat" },
+              { symbol: "₺", name: "Turkish Lira" },
+              { symbol: "₽", name: "Russian Ruble" },
+              { symbol: "₩", name: "South Korean Won" },
+              { symbol: "Fr", name: "Swiss Franc" },
+              { symbol: "C$", name: "Canadian Dollar" },
+              { symbol: "A$", name: "Australian Dollar" },
+              { symbol: "د.إ", name: "UAE Dirham" },
+            ].map(c => (
+              <button key={c.symbol} onClick={() => { setCurrency(c.symbol); setShowCurrencyMenu(false); }} style={{
+                width: "100%", height: "36px", padding: "0 12px", borderRadius: "8px",
+                border: "none", background: currency === c.symbol ? "rgba(34,197,94,0.12)" : "transparent",
+                color: currency === c.symbol ? "#22c55e" : "rgba(255,255,255,0.7)",
+                fontSize: "13px", cursor: "pointer", textAlign: "left",
+                display: "flex", alignItems: "center", gap: "10px",
+                fontFamily: "'DM Sans', sans-serif",
+              }}>
+                <span style={{ fontWeight: 700, minWidth: "24px" }}>{c.symbol}</span>
+                <span style={{ opacity: 0.6, fontSize: "12px" }}>{c.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       {/* Summary cards */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "16px" }}>
         {[
@@ -455,7 +568,7 @@ function BudgetPanel({ textColor, mutedColor }) {
           💰 Hələ əməliyyat yoxdur
         </div>
       ) : (
-        [...transactions].reverse().map(t => (
+        [...filteredTransactions].reverse().map(t => (
           <div key={t.id} style={{
             display: "flex", alignItems: "center", gap: "10px",
             padding: "12px 14px", marginBottom: "8px",
@@ -467,11 +580,13 @@ function BudgetPanel({ textColor, mutedColor }) {
               background: t.type === "income" ? "rgba(34,197,94,0.15)" : "rgba(244,63,94,0.15)",
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px",
             }}>{t.type === "income" ? "🟢" : "🔴"}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "14px", fontWeight: 500, color: textColor }}>{t.text}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: "14px", fontWeight: 500, color: textColor,
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            }}>{t.text}</div>
               <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", fontFamily: "monospace" }}>
-                {new Date(t.date).toLocaleDateString("az-AZ", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-              </div>
+                {new Date(t.date).toLocaleDateString("az-AZ", { day: "2-digit", month: "2-digit", year: "numeric" })}              </div>
             </div>
             <div style={{ fontSize: "15px", fontWeight: 700, color: t.type === "income" ? "#22c55e" : "#f43f5e" }}>
               {t.type === "income" ? "+" : "-"}{t.amount.toFixed(2)} {currency}
@@ -491,25 +606,86 @@ function BudgetPanel({ textColor, mutedColor }) {
     </div>
   );
 }
+function NoteItem({ note, onDelete, onEdit }) {
+  const [expanded, setExpanded] = useState(false);
+  const words = note.text.trim().split(/[\s,،.!?;:]+/).filter(w => w.length > 0);
+  const title = words.slice(0, 3).join(" ") + (words.length > 3 ? "..." : "");
+  const noteColor = note.color || "#ffffff";
 
+  return (
+    <div style={{
+      background: "rgba(255,255,255,0.06)", border: "0.5px solid rgba(255,255,255,0.1)",
+      borderLeft: `3px solid ${noteColor === "#ffffff" ? "rgba(255,255,255,0.2)" : noteColor}`,
+      borderRadius: "12px", padding: "12px 14px", marginBottom: "8px",
+      backdropFilter: "blur(8px)", animation: "slideIn 0.25s ease", cursor: "pointer",
+    }} onClick={() => setExpanded(e => !e)}>
+
+      {/* Başlıq — ilk 3 söz */}
+      <p style={{
+        fontSize: "14px", fontWeight: 700,
+        color: noteColor === "#ffffff" ? "#ffffff" : noteColor,
+        marginBottom: expanded ? "6px" : "0",
+        wordBreak: "break-word",
+      }}>{title}</p>
+
+      {/* Tam mətn — yalnız açıldıqda */}
+      {expanded && (
+        <p style={{
+          fontSize: "13px", color: "rgba(255,255,255,0.6)",
+          whiteSpace: "pre-wrap", wordBreak: "break-word",
+          marginBottom: "6px", lineHeight: 1.6,
+        }}>{note.text}</p>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "6px" }}>
+        <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", fontFamily: "monospace" }}>
+          {new Date(note.createdAt).toLocaleDateString("az-AZ", { day: "2-digit", month: "2-digit", year: "numeric" })}
+          {!expanded && <span style={{ color: "rgba(255,255,255,0.2)", marginLeft: "6px" }}>▼</span>}
+          {expanded && <span style={{ color: "rgba(255,255,255,0.2)", marginLeft: "6px" }}>▲</span>}
+        </span>
+        <div style={{ display: "flex", gap: "5px" }}>
+          <button onClick={e => { e.stopPropagation(); onEdit(note); }} style={{
+            width: "24px", height: "24px", borderRadius: "6px", border: "none",
+            background: "rgba(34,197,94,0.15)", color: "#22c55e",
+            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          }}><EditIcon /></button>
+          <button onClick={e => { e.stopPropagation(); onDelete(note.id); }} style={{
+            width: "24px", height: "24px", borderRadius: "6px", border: "none",
+            background: "rgba(244,63,94,0.12)", color: "#f43f5e",
+            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          }}><TrashIcon /></button>
+        </div>
+      </div>
+    </div>
+  );
+}
 // ── Notes Panel ──────────────────────────────────────────────
 function NotesPanel() {
   const [notes, setNotes] = useState(() => {
     try { return JSON.parse(localStorage.getItem("notes_v1")) || []; } catch { return []; }
   });
   const [noteInput, setNoteInput] = useState("");
+  const [noteColor, setNoteColor] = useState("#ffffff");
  
   useEffect(() => { localStorage.setItem("notes_v1", JSON.stringify(notes)); }, [notes]);
  
   const addNote = () => {
     const text = noteInput.trim();
     if (!text) return;
-    setNotes(prev => [{ id: Date.now(), text, createdAt: new Date().toISOString() }, ...prev]);
+    setNotes(prev => [{ id: Date.now(), text, color: noteColor, createdAt: new Date().toISOString() }, ...prev]);
     setNoteInput("");
   };
  
   const deleteNote = (id) => setNotes(prev => prev.filter(n => n.id !== id));
- 
+  const [editingNote, setEditingNote] = useState(null);
+  const [editNoteText, setEditNoteText] = useState("");
+  const [editNoteColor, setEditNoteColor] = useState("#ffffff");
+
+  const saveNoteEdit = () => {
+  if (!editNoteText.trim() || !editingNote) return;
+  setNotes(prev => prev.map(n => n.id === editingNote.id ? { ...n, text: editNoteText, color: editNoteColor } : n));
+  setEditingNote(null); setEditNoteText(""); setEditNoteColor("#ffffff");
+};
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Note input */}
@@ -533,6 +709,17 @@ function NotesPanel() {
           onFocus={e => { e.target.style.borderColor = "#22c55e"; e.target.style.boxShadow = "0 0 0 2px rgba(34,197,94,0.15)"; }}
           onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.12)"; e.target.style.boxShadow = "none"; }}
         />
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
+         <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>Color:</span>
+         {TASK_COLORS.map(c => (
+          <button key={c} onClick={() => setNoteColor(c)} style={{
+             width: "18px", height: "18px", borderRadius: "50%", background: c,
+             border: noteColor === c ? "2px solid #22c55e" : c === "#ffffff" ? "1px solid rgba(255,255,255,0.3)" : "2px solid transparent",
+             cursor: "pointer", transition: "transform 0.15s",
+             transform: noteColor === c ? "scale(1.25)" : "scale(1)",
+         }}/>
+       ))}
+     </div>
         <button onClick={addNote} style={{
           width: "100%", height: "38px", borderRadius: "10px",
           background: "#22c55e", border: "none", color: "#fff",
@@ -549,31 +736,64 @@ function NotesPanel() {
           </div>
         ) : (
           notes.map(note => (
-            <div key={note.id} style={{
-              background: "rgba(255,255,255,0.06)", border: "0.5px solid rgba(255,255,255,0.1)",
-              borderRadius: "12px", padding: "12px 14px", marginBottom: "8px",
-              backdropFilter: "blur(8px)", animation: "slideIn 0.25s ease",
-              position: "relative",
-            }}>
-              <p style={{ fontSize: "14px", color: "#e2e8f0", lineHeight: 1.6, marginBottom: "6px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                {note.text}
-              </p>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", fontFamily: "monospace" }}>
-                  {new Date(note.createdAt).toLocaleDateString("az-AZ", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                </span>
-                <button onClick={() => deleteNote(note.id)} style={{
-                  width: "24px", height: "24px", borderRadius: "6px", border: "none",
-                  background: "rgba(244,63,94,0.12)", color: "#f43f5e",
-                  display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                }}><TrashIcon /></button>
-              </div>
-            </div>
+            <NoteItem key={note.id} note={note} onDelete={deleteNote}
+              onEdit={n => { setEditingNote(n); setEditNoteText(n.text); setEditNoteColor(n.color || "#ffffff"); }} />
           ))
         )}
       </div>
-    </div>
-  );
+      {editingNote && (
+      <div onClick={e => e.target === e.currentTarget && setEditingNote(null)} style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 100, backdropFilter: "blur(6px)", padding: "20px",
+      }}>
+        <div style={{
+          background: "rgba(15,23,42,0.95)", border: "0.5px solid rgba(255,255,255,0.12)",
+          borderRadius: "18px", padding: "24px", width: "100%", maxWidth: "420px",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.6)", animation: "slideIn 0.2s ease",
+        }}>
+          <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#fff", marginBottom: "16px" }}>Edit note</h3>
+          <textarea autoFocus value={editNoteText}
+            onChange={e => setEditNoteText(e.target.value)}
+            rows={4}
+            style={{
+              width: "100%", padding: "10px 14px",
+              background: "rgba(255,255,255,0.08)", border: "0.5px solid #22c55e",
+              boxShadow: "0 0 0 2px rgba(34,197,94,0.15)",
+              borderRadius: "10px", color: "#e2e8f0", fontSize: "14px",
+              fontFamily: "'DM Sans', sans-serif", outline: "none",
+              marginBottom: "14px", resize: "none", lineHeight: 1.6,
+            }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "16px" }}>
+            <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>Color:</span>
+            {TASK_COLORS.map(c => (
+              <button key={c} onClick={() => setEditNoteColor(c)} style={{
+                width: "20px", height: "20px", borderRadius: "50%", background: c,
+                border: editNoteColor === c ? "2px solid #22c55e" : c === "#ffffff" ? "1px solid rgba(255,255,255,0.3)" : "2px solid transparent",
+                cursor: "pointer", transform: editNoteColor === c ? "scale(1.2)" : "scale(1)", transition: "transform 0.15s",
+              }} />
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+            <button onClick={() => setEditingNote(null)} style={{
+              height: "38px", padding: "0 16px", borderRadius: "8px",
+              border: "0.5px solid rgba(255,255,255,0.15)", background: "transparent",
+              color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: "14px",
+              fontFamily: "'DM Sans', sans-serif",
+            }}>Cancel</button>
+            <button onClick={saveNoteEdit} style={{
+              height: "38px", padding: "0 20px", borderRadius: "8px",
+              background: "#22c55e", border: "none", color: "#fff",
+              cursor: "pointer", fontSize: "14px", fontWeight: 600,
+              fontFamily: "'DM Sans', sans-serif",
+            }}>Save</button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+ );
 }
  
 // ── Main App ─────────────────────────────────────────────────
@@ -594,6 +814,9 @@ export default function TodoApp() {
   const [editColor, setEditColor] = useState("#ffffff");
   const [dragId, setDragId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
+  const [taskPeriod, setTaskPeriod] = useState("all");
+  const [goalPeriod, setGoalPeriod] = useState("all");
+  const [budgetPeriod, setBudgetPeriod] = useState("all");
   const inputRef = useRef(null);
  
   useEffect(() => {
@@ -627,12 +850,12 @@ export default function TodoApp() {
  
   const clearCompleted = () => setTasks(prev => prev.filter(t => !t.completed));
  
-  const filtered = tasks.filter(t => {
+  const periodFiltered = filterByPeriod(tasks, taskPeriod, "createdAt");
+  const filtered = periodFiltered.filter(t => {
     if (filter === "Active") return !t.completed;
     if (filter === "Completed") return t.completed;
     return true;
   });
- 
   const completedCount = tasks.filter(t => t.completed).length;
   const progress = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
  
@@ -822,7 +1045,7 @@ export default function TodoApp() {
                     </div>
                   </div>
                 </div>
- 
+                <PeriodSelector period={taskPeriod} onChange={setTaskPeriod} />
                 {/* Filters */}
                 <div style={{ display: "flex", gap: "6px", marginBottom: "14px", flexWrap: "wrap" }}>
                   {FILTERS.map(f => (
@@ -876,13 +1099,13 @@ export default function TodoApp() {
             {activePanel === "goals" && (
               <div style={{ maxWidth: "640px" }}>
                 <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#fff", marginBottom: "20px" }}>🎯 Goals</h1>
-                <GoalsPanel textColor="#e2e8f0" mutedColor="rgba(255,255,255,0.4)" />
+                <GoalsPanel textColor="#e2e8f0" mutedColor="rgba(255,255,255,0.4)" period={goalPeriod} onPeriodChange={setGoalPeriod} />
               </div>
             )}
             {activePanel === "budget" && (
               <div style={{ maxWidth: "640px" }}>
                 <h1 style={{ fontSize: "24px", fontWeight: 700, color: textColor, marginBottom: "20px" }}>💰 Budget</h1>
-                <BudgetPanel textColor={textColor} mutedColor={mutedColor} />
+                <BudgetPanel textColor={textColor} mutedColor={mutedColor} period={budgetPeriod} onPeriodChange={setBudgetPeriod} />
               </div>
             )}
           </div>
