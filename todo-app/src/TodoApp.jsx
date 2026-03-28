@@ -26,20 +26,28 @@ function formatTime() {
 }
 function filterByPeriod(items, period, dateKey) {
   const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - diff);
+  startOfWeek.setHours(0, 0, 0, 0);
+
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const startOfPrevWeek = new Date(startOfWeek);
+  startOfPrevWeek.setDate(startOfWeek.getDate() - 7);
+  const endOfPrevWeek = new Date(startOfWeek);
+
+  const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
   return items.filter(item => {
     const d = new Date(item[dateKey]);
-    if (period === "today") {
-      return d.toDateString() === now.toDateString();
-    }
-    if (period === "week") {
-      const start = new Date(now);
-      start.setDate(now.getDate() - now.getDay());
-      start.setHours(0, 0, 0, 0);
-      return d >= start;
-    }
-    if (period === "month") {
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    }
+    if (period === "today") return d.toDateString() === now.toDateString();
+    if (period === "week") return d >= startOfWeek;
+    if (period === "month") return d >= startOfMonth;
+    if (period === "prev_week") return d >= startOfPrevWeek && d < endOfPrevWeek;
+    if (period === "prev_month") return d >= startOfPrevMonth && d < endOfPrevMonth;
     return true;
   });
 }
@@ -65,6 +73,27 @@ function PeriodSelector({ period, onChange }) {
     </div>
   );
 } 
+function GoalPeriodSelector({ period, onChange }) {
+  const periods = [
+    { key: "all", label: "All time" },
+    { key: "month", label: "This month" },
+    { key: "week", label: "This week" },
+  ];
+  return (
+    <div style={{ display: "flex", gap: "6px", marginBottom: "16px", flexWrap: "wrap" }}>
+      {periods.map(p => (
+        <button key={p.key} onClick={() => onChange(p.key)} style={{
+          height: "30px", padding: "0 14px", borderRadius: "999px",
+          border: `0.5px solid ${period === p.key ? "#22c55e" : "rgba(255,255,255,0.15)"}`,
+          background: period === p.key ? "rgba(34,197,94,0.1)" : "transparent",
+          color: period === p.key ? "#22c55e" : "rgba(255,255,255,0.45)",
+          fontSize: "12px", fontWeight: period === p.key ? 600 : 400,
+          cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s",
+        }}>{p.label}</button>
+      ))}
+    </div>
+  );
+}
 function CheckIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -204,12 +233,12 @@ function GoalsPanel({ textColor, mutedColor, period, onPeriodChange }) {
 
   const filteredGoals = filterByPeriod(goals, period, "createdAt");
 
-  const totalProgress = goals.length === 0 ? 0 : Math.round(
-    goals.reduce((sum, goal) => {
+  const totalProgress = filteredGoals.length === 0 ? 0 : Math.round(
+    filteredGoals.reduce((sum, goal) => {
       if (goal.steps.length === 0) return sum + (goal.completed ? 100 : 0);
       const done = goal.steps.filter(s => s.completed).length;
       return sum + Math.round((done / goal.steps.length) * 100);
-    }, 0) / goals.length
+    }, 0) / filteredGoals.length
   );
     const addGoal = () => {
     const text = goalInput.trim();
@@ -220,8 +249,15 @@ function GoalsPanel({ textColor, mutedColor, period, onPeriodChange }) {
 
   const deleteGoal = (id) => setGoals(prev => prev.filter(g => g.id !== id));
 
-  const toggleGoal = (id) => setGoals(prev => prev.map(g => g.id === id ? { ...g, completed: !g.completed } : g));
-
+  const toggleGoal = (id) => setGoals(prev => prev.map(g => {
+    if (g.id !== id) return g;
+    const nowCompleted = !g.completed;
+    return {
+      ...g,
+      completed: nowCompleted,
+      steps: g.steps.map(s => ({ ...s, completed: nowCompleted })),
+    };
+  }));
   const addStep = (goalId) => {
     const text = (stepInputs[goalId] || "").trim();
     if (!text) return;
@@ -241,7 +277,7 @@ function GoalsPanel({ textColor, mutedColor, period, onPeriodChange }) {
 
   return (
     <div>
-     <PeriodSelector period={period} onChange={onPeriodChange} />
+    <PeriodSelector period={period} onChange={onPeriodChange} />
       {/* Total progress */}
       {goals.length > 0 && (
         <div style={{
@@ -814,7 +850,6 @@ export default function TodoApp() {
   const [editColor, setEditColor] = useState("#ffffff");
   const [dragId, setDragId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
-  const [taskPeriod, setTaskPeriod] = useState("all");
   const [goalPeriod, setGoalPeriod] = useState("all");
   const [budgetPeriod, setBudgetPeriod] = useState("all");
   const inputRef = useRef(null);
@@ -850,14 +885,13 @@ export default function TodoApp() {
  
   const clearCompleted = () => setTasks(prev => prev.filter(t => !t.completed));
  
-  const periodFiltered = filterByPeriod(tasks, taskPeriod, "createdAt");
-  const filtered = periodFiltered.filter(t => {
+  const filtered = tasks.filter(t => {
     if (filter === "Active") return !t.completed;
     if (filter === "Completed") return t.completed;
     return true;
   });
-  const completedCount = tasks.filter(t => t.completed).length;
-  const progress = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
+  const completedCount = filtered.filter(t => t.completed).length;
+  const progress = filtered.length ? Math.round((completedCount / filtered.length) * 100) : 0;
  
   const handleDrop = () => {
     if (dragId === null || dragOverId === null || dragId === dragOverId) return;
@@ -958,16 +992,14 @@ export default function TodoApp() {
                   <div style={{ marginTop: "10px", fontSize: "12px", color: "rgba(255,255,255,0.35)", lineHeight: 1.8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", height: "22px", alignItems: "center" }}>
                     <span>Total</span>
-                    <strong style={{ color: "#e2e8f0" }}>{tasks.length}</strong>
+                    <strong style={{ color: "#e2e8f0" }}>{filtered.length}</strong>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", height: "22px", alignItems: "center" }}>
                    <span>Active</span>
-                   <strong style={{ color: "#f59e0b" }}>{tasks.filter(t => !t.completed).length}</strong>
-                  </div>
+                   <strong style={{ color: "#f59e0b" }}>{filtered.filter(t => !t.completed).length}</strong>                  </div>
                   <div style={{ display: "flex", justifyContent: "space-between", height: "22px", alignItems: "center" }}>
                    <span>Done</span>
-                   <strong style={{ color: "#22c55e" }}>{completedCount}</strong>
-                  </div>
+                   <strong style={{ color: "#22c55e" }}>{filtered.filter(t => t.completed).length}</strong>                  </div>
                   </div>
                 </div>
               </div>
@@ -1045,7 +1077,6 @@ export default function TodoApp() {
                     </div>
                   </div>
                 </div>
-                <PeriodSelector period={taskPeriod} onChange={setTaskPeriod} />
                 {/* Filters */}
                 <div style={{ display: "flex", gap: "6px", marginBottom: "14px", flexWrap: "wrap" }}>
                   {FILTERS.map(f => (
