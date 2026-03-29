@@ -72,6 +72,7 @@ function GoalPeriodSelector({ period, onChange }) {
     { key: "all", label: "All time" },
     { key: "month", label: "This month" },
     { key: "week", label: "This week" },
+    { key: "today", label: "Today" },
     { key: "prev_month", label: "Last month" },
     { key: "prev_week", label: "Last week" },
   ];
@@ -170,14 +171,650 @@ function TaskItem({ task, onToggle, onDelete, onEdit, onDragStart, onDragOver, o
     </div>
   );
 }
+function HabitsPanel() {
+  const [habits, setHabits] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("habits_v1")) || []; } catch { return []; }
+  });
+  const [name, setName] = useState("");
+  const [type, setType] = useState("daily");
+  const [target, setTarget] = useState(3);
+  const [filter, setFilter] = useState("All");
+  const [animatingId, setAnimatingId] = useState(null);
 
+  useEffect(() => { localStorage.setItem("habits_v1", JSON.stringify(habits)); }, [habits]);
+
+  // Bugünün tarixi — "2024-01-15" formatında
+  const today = new Date().toISOString().split("T")[0];
+
+  // Bu həftənin başlanğıcı — streak və weekly reset üçün
+  function getWeekStart() {
+    const now = new Date();
+    const day = now.getDay();
+    const diff = day === 0 ? 6 : day - 1;
+    const ws = new Date(now);
+    ws.setDate(now.getDate() - diff);
+    ws.setHours(0, 0, 0, 0);
+    return ws.toISOString().split("T")[0];
+  }
+
+  const weekStart = getWeekStart();
+
+  // Streak hesablanması — history obyektinə baxır
+  // Daily: ardıcıl günlər sayılır
+  // Weekly: ardıcıl həftələr sayılır
+  function calcStreak(habit) {
+    if (habit.type === "daily") {
+      let streak = 0;
+      const d = new Date();
+      // Bu gün tamamlanıbsa sayırıq, yoxsa dünəndən başlayırıq
+      if (!habit.history[today]) d.setDate(d.getDate() - 1);
+      while (true) {
+        const key = d.toISOString().split("T")[0];
+        if (!habit.history[key]) break;
+        streak++;
+        d.setDate(d.getDate() - 1);
+      }
+      return streak;
+    } else {
+      // Weekly streak: hər həftə üçün history-də completedCount >= target olubmu?
+      return habit.streak || 0;
+    }
+  }
+
+  // Weekly habits üçün bu həftəki tamamlanma sayını hesablayır
+  function getWeeklyCount(habit) {
+    return Object.entries(habit.history || {})
+      .filter(([date]) => date >= weekStart)
+      .reduce((sum, [, val]) => sum + (val || 0), 0);
+  }
+
+  // Habit əlavə etmə
+  const addHabit = () => {
+    const text = name.trim();
+    if (!text) return;
+    setHabits(prev => [...prev, {
+      id: Date.now(),
+      name: text,
+      type,
+      target: type === "weekly" ? target : 1,
+      history: {},
+      streak: 0,
+    }]);
+    setName("");
+  };
+
+  // Daily habit toggle
+  const toggleDaily = (id) => {
+    setHabits(prev => prev.map(h => {
+      if (h.id !== id || h.type !== "daily") return h;
+      const done = !h.history[today];
+      const newHistory = { ...h.history, [today]: done };
+      // Streak-i yenidən hesablayırıq
+      let streak = 0;
+      const d = new Date();
+      if (!done) d.setDate(d.getDate() - 1);
+      while (true) {
+        const key = d.toISOString().split("T")[0];
+        if (!newHistory[key]) break;
+        streak++;
+        d.setDate(d.getDate() - 1);
+      }
+      // Streak artıbsa animasiya işə salırıq
+      if (streak > h.streak) {
+        setAnimatingId(id);
+        setTimeout(() => setAnimatingId(null), 600);
+      }
+      return { ...h, history: newHistory, streak };
+    }));
+  };
+
+  // Weekly habit — bir tamamlanma əlavə et və ya geri al
+  const toggleWeekly = (id) => {
+    setHabits(prev => prev.map(h => {
+      if (h.id !== id || h.type !== "weekly") return h;
+      const currentCount = getWeeklyCount(h);
+      // Artıq hədəfə çatılıbsa azaldırıq, çatılmayıbsa artırırıq
+      const newCount = currentCount >= h.target ? currentCount - 1 : currentCount + 1;
+      const diff = newCount - currentCount;
+      const newHistory = { ...h.history, [today]: (h.history[today] || 0) + diff };
+      // Weekly streak: bu həftə hədəfə çatıldısa streak artır
+      let streak = h.streak;
+      if (newCount >= h.target && currentCount < h.target) {
+        streak = h.streak + 1;
+        setAnimatingId(id);
+        setTimeout(() => setAnimatingId(null), 600);
+      } else if (newCount < h.target && currentCount >= h.target) {
+        streak = Math.max(0, h.streak - 1);
+      }
+      return { ...h, history: newHistory, streak };
+    }));
+  };
+
+  const deleteHabit = (id) => setHabits(prev => prev.filter(h => h.id !== id));
+
+  const filtered = habits.filter(h =>
+    filter === "All" ? true : filter === "Daily" ? h.type === "daily" : h.type === "weekly"
+  );
+
+  return (
+    <div>
+      {/* Yeni habit əlavə etmə formu */}
+      <div className="rounded-2xl p-4 mb-4 border border-white/10" style={{ background: "rgba(255,255,255,0.07)" }}>
+        <div className="flex gap-2 mb-3">
+          <input value={name} onChange={e => setName(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && addHabit()}
+            placeholder="New habit name…"
+            className="flex-1 h-11 px-4 rounded-xl text-sm outline-none"
+            style={{ background: "rgba(255,255,255,0.08)", border: "0.5px solid rgba(255,255,255,0.12)", color: "#e2e8f0", fontFamily: "'DM Sans',sans-serif" }}
+            onFocus={e => { e.target.style.borderColor = "#22c55e"; e.target.style.boxShadow = "0 0 0 2px rgba(34,197,94,0.15)"; }}
+            onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.12)"; e.target.style.boxShadow = "none"; }}
+          />
+          <button onClick={addHabit}
+            className="h-11 px-5 rounded-xl bg-green-500 text-white text-sm font-semibold border-none cursor-pointer whitespace-nowrap">
+            + Add
+          </button>
+        </div>
+
+        {/* Tip seçimi: Daily / Weekly */}
+        <div className="flex gap-2 mb-3">
+          {["daily", "weekly"].map(t => (
+            <button key={t} onClick={() => setType(t)}
+              className="flex-1 h-9 rounded-lg text-sm font-semibold cursor-pointer border transition-all"
+              style={{
+                borderColor: type === t ? "#22c55e" : "rgba(255,255,255,0.15)",
+                background: type === t ? "rgba(34,197,94,0.12)" : "transparent",
+                color: type === t ? "#22c55e" : "rgba(255,255,255,0.4)",
+              }}>
+              {t === "daily" ? "📅 Daily" : "📆 Weekly"}
+            </button>
+          ))}
+        </div>
+
+        {/* Weekly seçildisə hədəf sayı göstər */}
+        {type === "weekly" && (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-white/40">Weekly target:</span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setTarget(t => Math.max(1, t - 1))}
+                className="w-8 h-8 rounded-lg text-white font-bold cursor-pointer border-none"
+                style={{ background: "rgba(255,255,255,0.1)", fontSize: "16px" }}>−</button>
+              <span className="text-white font-bold w-6 text-center">{target}</span>
+              <button onClick={() => setTarget(t => Math.min(7, t + 1))}
+                className="w-8 h-8 rounded-lg text-white font-bold cursor-pointer border-none"
+                style={{ background: "rgba(255,255,255,0.1)", fontSize: "16px" }}>+</button>
+            </div>
+            <span className="text-xs text-white/30">times/week</span>
+          </div>
+        )}
+      </div>
+
+      {/* Filter düymələri */}
+      <div className="flex gap-2 mb-4">
+        {["All", "Daily", "Weekly"].map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className="h-8 px-4 rounded-full text-xs font-semibold transition-all border"
+            style={{
+              borderColor: filter === f ? "#22c55e" : "rgba(255,255,255,0.15)",
+              background: filter === f ? "rgba(34,197,94,0.1)" : "transparent",
+              color: filter === f ? "#22c55e" : "rgba(255,255,255,0.45)",
+            }}>
+            {f}
+          </button>
+        ))}
+      </div>
+
+      {/* Habit siyahısı */}
+      {filtered.length === 0 ? (
+        <div className="text-center py-12 text-white/30 text-sm">🔁 No habits yet</div>
+      ) : (
+        filtered.map(habit => {
+          const isDailyDone = habit.type === "daily" && !!habit.history[today];
+          const weeklyCount = habit.type === "weekly" ? getWeeklyCount(habit) : 0;
+          const isWeeklyDone = habit.type === "weekly" && weeklyCount >= habit.target;
+          const streak = calcStreak(habit);
+          const isAnimating = animatingId === habit.id;
+
+          return (
+            <div key={habit.id}
+              className="flex items-center gap-3 px-4 py-3 rounded-xl mb-2 border border-white/10 transition-all duration-200"
+              style={{
+                background: (isDailyDone || isWeeklyDone) ? "rgba(34,197,94,0.07)" : "rgba(255,255,255,0.06)",
+                borderLeft: `3px solid ${(isDailyDone || isWeeklyDone) ? "#22c55e" : "rgba(255,255,255,0.15)"}`,
+                animation: "slideIn 0.25s ease",
+              }}>
+
+              {/* Daily: checkbox. Weekly: +/- düyməsi */}
+              {habit.type === "daily" ? (
+                <button onClick={() => toggleDaily(habit.id)}
+                  className="flex-shrink-0 flex items-center justify-center cursor-pointer text-white transition-all duration-200 w-5 h-5 rounded-md"
+                  style={{ border: `2px solid ${isDailyDone ? "#22c55e" : "rgba(255,255,255,0.3)"}`, background: isDailyDone ? "#22c55e" : "transparent" }}>
+                  {isDailyDone && (
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </button>
+              ) : (
+                <button onClick={() => toggleWeekly(habit.id)}
+                  className="flex-shrink-0 w-8 h-8 rounded-lg text-xs font-bold cursor-pointer border-none transition-all"
+                  style={{ background: isWeeklyDone ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.1)", color: isWeeklyDone ? "#22c55e" : "#e2e8f0" }}>
+                  {isWeeklyDone ? "✓" : "+"}
+                </button>
+              )}
+
+              {/* Habit adı və progress */}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate" style={{ color: "#e2e8f0", textDecoration: isDailyDone ? "line-through" : "none", opacity: isDailyDone ? 0.6 : 1 }}>
+                  {habit.name}
+                </div>
+
+                {/* Weekly progress bar */}
+                {habit.type === "weekly" && (
+                  <div className="mt-1.5">
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[10px] text-white/35">{weeklyCount}/{habit.target} this week</span>
+                      <span className="text-[10px]" style={{ color: isWeeklyDone ? "#22c55e" : "rgba(255,255,255,0.35)" }}>
+                        {isWeeklyDone ? "✅ Goal met!" : `${habit.target - weeklyCount} more to go`}
+                      </span>
+                    </div>
+                    <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.1)" }}>
+                      <div className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min((weeklyCount / habit.target) * 100, 100)}%`, background: isWeeklyDone ? "#22c55e" : "#f59e0b" }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Daily: tip etiketi */}
+                {habit.type === "daily" && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full mt-1 inline-block"
+                    style={{ color: "#3b82f6", background: "rgba(59,130,246,0.12)" }}>DAILY</span>
+                )}
+              </div>
+
+              {/* Streak — animasiya: streak artanda bounce effekti */}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <span style={{
+                  fontSize: "16px",
+                  display: "inline-block",
+                  transform: isAnimating ? "scale(1.5)" : "scale(1)",
+                  transition: "transform 0.3s cubic-bezier(.17,.67,.47,1.5)",
+                }}>🔥</span>
+                <span className="text-xs font-bold" style={{ color: streak > 0 ? "#f59e0b" : "rgba(255,255,255,0.25)" }}>
+                  {streak}
+                </span>
+              </div>
+
+              {/* Sil düyməsi */}
+              <button onClick={() => deleteHabit(habit.id)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer border-none flex-shrink-0"
+                style={{ background: "rgba(244,63,94,0.12)", color: "#f43f5e" }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3,6 5,6 21,6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                </svg>
+              </button>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+function GymPanel() {
+  // ─── STATE ───────────────────────────────────────────────────────────────
+  const [program, setProgram] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("gym_program_v1")) || []; } catch { return []; }
+  });
+  const [logs, setLogs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("gym_logs_v1")) || []; } catch { return []; }
+  });
+
+  // Aktiv tab: "program" (plan qurmaq) və ya "log" (trenirovka qeyd etmək)
+  const [tab, setTab] = useState("program");
+
+  // Yeni gün əlavə etmək üçün input
+  const [newDayName, setNewDayName] = useState("");
+
+  // Seçili gün (log etmək üçün)
+  const [selectedDayId, setSelectedDayId] = useState(null);
+
+  // Hər gün üçün yeni məşq input-ları ayrı-ayrı saxlanılır
+  const [exInputs, setExInputs] = useState({});
+
+  // Log etmə üçün: seçili gün və məşq nəticələri
+  const [logDayId, setLogDayId] = useState(null);
+  const [logInputs, setLogInputs] = useState({});
+
+  useEffect(() => { localStorage.setItem("gym_program_v1", JSON.stringify(program)); }, [program]);
+  useEffect(() => { localStorage.setItem("gym_logs_v1", JSON.stringify(logs)); }, [logs]);
+
+  const today = new Date().toISOString().split("T")[0];
+
+  // ─── PROGRAM FUNKSİYALARI ────────────────────────────────────────────────
+
+  // Yeni gün (məsələn "Push Day") əlavə et
+  const addDay = () => {
+    const text = newDayName.trim();
+    if (!text) return;
+    setProgram(prev => [...prev, { id: Date.now(), dayName: text, exercises: [] }]);
+    setNewDayName("");
+  };
+
+  const deleteDay = (id) => setProgram(prev => prev.filter(d => d.id !== id));
+
+  // Günə yeni məşq əlavə et
+  const addExercise = (dayId) => {
+    const inp = exInputs[dayId] || {};
+    const name = (inp.name || "").trim();
+    if (!name) return;
+    setProgram(prev => prev.map(d => d.id !== dayId ? d : {
+      ...d,
+      exercises: [...d.exercises, {
+        id: Date.now(),
+        name,
+        sets: parseInt(inp.sets) || 3,
+        reps: parseInt(inp.reps) || 10,
+      }]
+    }));
+    setExInputs(prev => ({ ...prev, [dayId]: {} }));
+  };
+
+  const deleteExercise = (dayId, exId) => {
+    setProgram(prev => prev.map(d => d.id !== dayId ? d : {
+      ...d, exercises: d.exercises.filter(e => e.id !== exId)
+    }));
+  };
+
+  // ─── LOG FUNKSİYALARI ────────────────────────────────────────────────────
+
+  // Seçili gündəki məşqlər üçün log saxla
+  const saveLog = () => {
+    if (!logDayId) return;
+    const day = program.find(d => d.id === logDayId);
+    if (!day) return;
+    const exercises = day.exercises.map(ex => ({
+      name: ex.name,
+      weight: parseFloat(logInputs[ex.id]?.weight) || 0,
+      reps: parseInt(logInputs[ex.id]?.reps) || 0,
+    }));
+    setLogs(prev => [...prev, { id: Date.now(), date: today, dayId: logDayId, dayName: day.dayName, exercises }]);
+    setLogInputs({});
+    setLogDayId(null);
+  };
+
+  // Müəyyən məşqin son log-unu tapır (müqayisə üçün)
+  function getLastLog(exName) {
+    for (let i = logs.length - 1; i >= 0; i--) {
+      const ex = logs[i].exercises.find(e => e.name === exName);
+      if (ex) return ex;
+    }
+    return null;
+  }
+
+  // Müqayisə: əvvəlki log ilə cari input-u müqayisə edir
+  // Qaytarır: "up", "down", "same", null
+  function getProgressIndicator(exName, currentWeight, currentReps) {
+    const last = getLastLog(exName);
+    if (!last) return null;
+    const cw = parseFloat(currentWeight) || 0;
+    const cr = parseInt(currentReps) || 0;
+    if (cw > last.weight || cr > last.reps) return "up";
+    if (cw < last.weight || cr < last.reps) return "down";
+    return "same";
+  }
+
+  // ─── RENDER ──────────────────────────────────────────────────────────────
+  return (
+    <div>
+      {/* Tab seçimi: Program / Log */}
+      <div className="flex gap-2 mb-4">
+        {[{ key: "program", label: "📋 Program" }, { key: "log", label: "📝 Log Workout" }].map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className="flex-1 h-10 rounded-xl text-sm font-semibold cursor-pointer border transition-all"
+            style={{
+              borderColor: tab === t.key ? "#22c55e" : "rgba(255,255,255,0.15)",
+              background: tab === t.key ? "rgba(34,197,94,0.12)" : "transparent",
+              color: tab === t.key ? "#22c55e" : "rgba(255,255,255,0.4)",
+            }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── PROGRAM TAB ── */}
+      {tab === "program" && (
+        <div>
+          {/* Yeni gün əlavə et */}
+          <div className="flex gap-2 mb-4">
+            <input value={newDayName} onChange={e => setNewDayName(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && addDay()}
+              placeholder="Day name (e.g. Push Day)…"
+              className="flex-1 h-11 px-4 rounded-xl text-sm outline-none"
+              style={{ background: "rgba(255,255,255,0.08)", border: "0.5px solid rgba(255,255,255,0.12)", color: "#e2e8f0", fontFamily: "'DM Sans',sans-serif" }}
+              onFocus={e => { e.target.style.borderColor = "#22c55e"; e.target.style.boxShadow = "0 0 0 2px rgba(34,197,94,0.15)"; }}
+              onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.12)"; e.target.style.boxShadow = "none"; }}
+            />
+            <button onClick={addDay}
+              className="h-11 px-5 rounded-xl bg-green-500 text-white text-sm font-semibold border-none cursor-pointer">
+              + Add
+            </button>
+          </div>
+
+          {program.length === 0 ? (
+            <div className="text-center py-12 text-white/30 text-sm">🏋️ No workout days yet</div>
+          ) : (
+            program.map(day => (
+              <div key={day.id} className="rounded-2xl p-4 mb-3 border border-white/10"
+                style={{ background: "rgba(255,255,255,0.06)", animation: "slideIn 0.25s ease" }}>
+
+                {/* Gün başlığı */}
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-bold text-white">{day.dayName}</span>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => setSelectedDayId(selectedDayId === day.id ? null : day.id)}
+                      className="h-7 px-3 rounded-lg text-xs font-semibold cursor-pointer border"
+                      style={{ borderColor: "rgba(59,130,246,0.4)", background: "rgba(59,130,246,0.1)", color: "#3b82f6" }}>
+                      {selectedDayId === day.id ? "Close" : "+ Exercise"}
+                    </button>
+                    <button onClick={() => deleteDay(day.id)}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer border-none"
+                      style={{ background: "rgba(244,63,94,0.12)", color: "#f43f5e" }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3,6 5,6 21,6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Məşq siyahısı */}
+                {day.exercises.length === 0 ? (
+                  <div className="text-xs text-white/25 py-2 text-center">No exercises yet</div>
+                ) : (
+                  day.exercises.map(ex => {
+                    const last = getLastLog(ex.name);
+                    return (
+                      <div key={ex.id} className="flex items-center gap-2 px-3 py-2 mb-1 rounded-lg"
+                        style={{ background: "rgba(255,255,255,0.04)" }}>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm text-white/80 truncate block">{ex.name}</span>
+                          <span className="text-[10px] text-white/30">{ex.sets} sets × {ex.reps} reps</span>
+                          {/* Son nəticəni ghost text kimi göstər */}
+                          {last && (
+                            <span className="text-[10px] text-white/25 ml-2">
+                              Last: {last.weight}kg × {last.reps}
+                            </span>
+                          )}
+                        </div>
+                        <button onClick={() => deleteExercise(day.id, ex.id)}
+                          className="flex items-center justify-center cursor-pointer border-none bg-transparent"
+                          style={{ width: "20px", height: "20px", color: "rgba(244,63,94,0.5)", fontSize: "16px" }}>×</button>
+                      </div>
+                    );
+                  })
+                )}
+
+                {/* Məşq əlavə etmə formu — yalnız seçili gün üçün açılır */}
+                {selectedDayId === day.id && (
+                  <div className="mt-3 pt-3 border-t border-white/10">
+                    <div className="flex gap-2 flex-wrap">
+                      <input
+                        placeholder="Exercise name"
+                        value={exInputs[day.id]?.name || ""}
+                        onChange={e => setExInputs(prev => ({ ...prev, [day.id]: { ...prev[day.id], name: e.target.value } }))}
+                        className="flex-1 h-9 px-3 rounded-lg text-sm outline-none"
+                        style={{ background: "rgba(255,255,255,0.07)", border: "0.5px solid rgba(255,255,255,0.12)", color: "#e2e8f0", fontFamily: "'DM Sans',sans-serif", minWidth: "120px" }}
+                      />
+                      <input
+                        placeholder="Sets"
+                        type="number"
+                        value={exInputs[day.id]?.sets || ""}
+                        onChange={e => setExInputs(prev => ({ ...prev, [day.id]: { ...prev[day.id], sets: e.target.value } }))}
+                        className="w-16 h-9 px-2 rounded-lg text-sm outline-none text-center"
+                        style={{ background: "rgba(255,255,255,0.07)", border: "0.5px solid rgba(255,255,255,0.12)", color: "#e2e8f0", fontFamily: "'DM Mono',monospace" }}
+                      />
+                      <input
+                        placeholder="Reps"
+                        type="number"
+                        value={exInputs[day.id]?.reps || ""}
+                        onChange={e => setExInputs(prev => ({ ...prev, [day.id]: { ...prev[day.id], reps: e.target.value } }))}
+                        className="w-16 h-9 px-2 rounded-lg text-sm outline-none text-center"
+                        style={{ background: "rgba(255,255,255,0.07)", border: "0.5px solid rgba(255,255,255,0.12)", color: "#e2e8f0", fontFamily: "'DM Mono',monospace" }}
+                      />
+                      <button onClick={() => addExercise(day.id)}
+                        className="h-9 px-4 rounded-lg text-sm font-semibold cursor-pointer border-none"
+                        style={{ background: "rgba(34,197,94,0.2)", color: "#22c55e" }}>
+                        + Add
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── LOG TAB ── */}
+      {tab === "log" && (
+        <div>
+          {/* Gün seçimi */}
+          {program.length === 0 ? (
+            <div className="text-center py-12 text-white/30 text-sm">
+              First create a program in the Program tab
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {program.map(d => (
+                  <button key={d.id} onClick={() => { setLogDayId(d.id); setLogInputs({}); }}
+                    className="h-9 px-4 rounded-xl text-sm font-semibold cursor-pointer border transition-all"
+                    style={{
+                      borderColor: logDayId === d.id ? "#22c55e" : "rgba(255,255,255,0.15)",
+                      background: logDayId === d.id ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.05)",
+                      color: logDayId === d.id ? "#22c55e" : "rgba(255,255,255,0.5)",
+                    }}>
+                    {d.dayName}
+                  </button>
+                ))}
+              </div>
+
+              {/* Seçili günün məşqləri — nəticə daxil etmə */}
+              {logDayId && (() => {
+                const day = program.find(d => d.id === logDayId);
+                if (!day) return null;
+                return (
+                  <div className="rounded-2xl p-4 border border-white/10"
+                    style={{ background: "rgba(255,255,255,0.06)", animation: "slideIn 0.25s ease" }}>
+                    <div className="text-sm font-bold text-white mb-3">{day.dayName}</div>
+
+                    {day.exercises.map(ex => {
+                      const last = getLastLog(ex.name);
+                      const indicator = getProgressIndicator(ex.name, logInputs[ex.id]?.weight, logInputs[ex.id]?.reps);
+                      return (
+                        <div key={ex.id} className="mb-3 pb-3 border-b border-white/[0.07] last:border-0 last:mb-0 last:pb-0">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-sm font-medium text-white/80">{ex.name}</span>
+                            {/* Progress indicator: ↑ ↓ = */}
+                            {indicator && (
+                              <span className="text-sm font-bold"
+                                style={{ color: indicator === "up" ? "#22c55e" : indicator === "down" ? "#f43f5e" : "#f59e0b" }}>
+                                {indicator === "up" ? "↑" : indicator === "down" ? "↓" : "="}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Son nəticə — kiçik etiket kimi */}
+                          {last && (
+                            <div className="text-[10px] text-white/25 mb-1.5">
+                              Last: {last.weight}kg × {last.reps} reps
+                            </div>
+                          )}
+
+                          <div className="flex gap-2">
+                            <input
+                              placeholder={last ? `${last.weight}kg` : "Weight (kg)"}
+                              type="number"
+                              value={logInputs[ex.id]?.weight || ""}
+                              onChange={e => setLogInputs(prev => ({ ...prev, [ex.id]: { ...prev[ex.id], weight: e.target.value } }))}
+                              className="flex-1 h-9 px-3 rounded-lg text-sm outline-none"
+                              style={{ background: "rgba(255,255,255,0.07)", border: "0.5px solid rgba(255,255,255,0.12)", color: "#e2e8f0", fontFamily: "'DM Mono',monospace" }}
+                            />
+                            <input
+                              placeholder={last ? `${last.reps} reps` : "Reps"}
+                              type="number"
+                              value={logInputs[ex.id]?.reps || ""}
+                              onChange={e => setLogInputs(prev => ({ ...prev, [ex.id]: { ...prev[ex.id], reps: e.target.value } }))}
+                              className="flex-1 h-9 px-3 rounded-lg text-sm outline-none"
+                              style={{ background: "rgba(255,255,255,0.07)", border: "0.5px solid rgba(255,255,255,0.12)", color: "#e2e8f0", fontFamily: "'DM Mono',monospace" }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    <button onClick={saveLog}
+                      className="w-full h-11 mt-3 rounded-xl bg-green-500 text-white text-sm font-semibold border-none cursor-pointer">
+                      💾 Save Workout
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* Keçmiş log-lar */}
+              {logs.length > 0 && (
+                <div className="mt-4">
+                  <div className="text-xs font-semibold text-white/30 mb-2 tracking-widest">PREVIOUS WORKOUTS</div>
+                  {[...logs].reverse().slice(0, 5).map(log => (
+                    <div key={log.id} className="rounded-xl px-4 py-3 mb-2 border border-white/10"
+                      style={{ background: "rgba(255,255,255,0.04)" }}>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-semibold text-white/60">{log.dayName}</span>
+                        <span className="text-[10px] text-white/25 font-mono">{log.date}</span>
+                      </div>
+                      {log.exercises.map((ex, i) => (
+                        <div key={i} className="text-xs text-white/35 flex gap-3">
+                          <span className="truncate">{ex.name}</span>
+                          <span className="font-mono text-white/25">{ex.weight}kg × {ex.reps}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 function GoalsPanel({ textColor, period, onPeriodChange }) {
   const [goals, setGoals] = useState(() => {
     try { return JSON.parse(localStorage.getItem("goals_v1")) || []; } catch { return []; }
   });
   const [goalInput, setGoalInput] = useState("");
   const [stepInputs, setStepInputs] = useState({});
-
+  const [dragId, setDragId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
   useEffect(() => { localStorage.setItem("goals_v1", JSON.stringify(goals)); }, [goals]);
 
   const filteredGoals = filterByPeriod(goals, period, "createdAt");
@@ -214,7 +851,18 @@ function GoalsPanel({ textColor, period, onPeriodChange }) {
 
   const toggleStep = (goalId, stepId) => setGoals(prev => prev.map(g => g.id === goalId ? { ...g, steps: g.steps.map(s => s.id === stepId ? { ...s, completed: !s.completed } : s) } : g));
   const deleteStep = (goalId, stepId) => setGoals(prev => prev.map(g => g.id === goalId ? { ...g, steps: g.steps.filter(s => s.id !== stepId) } : g));
-
+  const handleGoalDrop = () => {
+    if (dragId === null || dragOverId === null || dragId === dragOverId) return;
+    setGoals(prev => {
+      const arr = [...prev];
+      const from = arr.findIndex(g => g.id === dragId);
+      const to   = arr.findIndex(g => g.id === dragOverId);
+      const [item] = arr.splice(from, 1);
+      arr.splice(to, 0, item);
+      return arr;
+    });
+    setDragId(null); setDragOverId(null);
+  };
   return (
     <div>
       <GoalPeriodSelector period={period} onChange={onPeriodChange} />
@@ -255,8 +903,14 @@ function GoalsPanel({ textColor, period, onPeriodChange }) {
             const doneSteps = goal.steps.filter(s => s.completed).length;
             const progress = goal.steps.length ? Math.round((doneSteps / goal.steps.length) * 100) : (goal.completed ? 100 : 0);
             return (
-              <div key={goal.id} className="rounded-2xl p-4 border border-white/10" style={{ background: "rgba(255,255,255,0.06)", animation: "slideIn 0.25s ease" }}>
-                <div className="flex items-center gap-2.5 mb-2.5">
+            <div key={goal.id}
+              draggable
+              onDragStart={e => { e.dataTransfer.effectAllowed = "move"; setDragId(goal.id); }}
+              onDragEnd={() => setDragId(null)}
+              onDragOver={e => { e.preventDefault(); setDragOverId(goal.id); }}
+              onDrop={handleGoalDrop}
+              className="rounded-2xl p-4 border border-white/10"
+              style={{ background: "rgba(255,255,255,0.06)", animation: "slideIn 0.25s ease", opacity: dragId === goal.id ? 0.4 : 1, cursor: "grab" }}>                <div className="flex items-center gap-2.5 mb-2.5">
                   <button onClick={() => toggleGoal(goal.id)} className="flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center cursor-pointer text-white transition-all min-w-[22px] min-h-[22px]"
                     style={{ border: `2px solid ${goal.completed ? "#22c55e" : "#a855f7"}`, background: goal.completed ? "#22c55e" : "transparent" }}>
                     {goal.completed && <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
@@ -409,15 +1063,22 @@ function BudgetPanel({ textColor, period, onPeriodChange }) {
   );
 }
 
-function NoteItem({ note, onDelete, onEdit }) {
+function NoteItem({ note, onDelete, onEdit, onDragStart, onDragOver, onDrop, isDragging }) {
   const [expanded, setExpanded] = useState(false);
   const words = note.text.trim().split(/[\s,،.!?;:]+/).filter(w => w.length > 0);
   const title = words.slice(0, 3).join(" ") + (words.length > 3 ? "..." : "");
   const noteColor = note.color || "#ffffff";
 
   return (
-    <div className="rounded-xl px-4 py-3 mb-2 border border-white/10 cursor-pointer" style={{ background: "rgba(255,255,255,0.06)", borderLeft: `3px solid ${noteColor === "#ffffff" ? "rgba(255,255,255,0.2)" : noteColor}`, animation: "slideIn 0.25s ease" }} onClick={() => setExpanded(e => !e)}>
-      <p className="text-sm font-bold break-words" style={{ color: noteColor === "#ffffff" ? "#ffffff" : noteColor, marginBottom: expanded ? "6px" : "0" }}>{title}</p>
+    <div
+      draggable
+      onDragStart={e => { e.dataTransfer.effectAllowed = "move"; onDragStart(note.id); }}
+      onDragEnd={() => onDragStart(null)}
+      onDragOver={e => { e.preventDefault(); onDragOver(note.id); }}
+      onDrop={onDrop}
+      onClick={() => setExpanded(e => !e)}
+      className="rounded-xl px-4 py-3 mb-2 border border-white/10"
+      style={{ background: "rgba(255,255,255,0.06)", borderLeft: `3px solid ${noteColor === "#ffffff" ? "rgba(255,255,255,0.2)" : noteColor}`, animation: "slideIn 0.25s ease", opacity: isDragging ? 0.4 : 1, cursor: "grab" }}>      <p className="text-sm font-bold break-words" style={{ color: noteColor === "#ffffff" ? "#ffffff" : noteColor, marginBottom: expanded ? "6px" : "0" }}>{title}</p>
       {expanded && <p className="text-[13px] text-white/60 whitespace-pre-wrap break-words mb-1.5 leading-relaxed">{note.text}</p>}
       <div className="flex justify-between items-center mt-1.5">
         <span className="text-[11px] text-white/30 font-mono">
@@ -443,7 +1104,8 @@ function NotesPanel() {
   const [editingNote, setEditingNote] = useState(null);
   const [editNoteText, setEditNoteText] = useState("");
   const [editNoteColor, setEditNoteColor] = useState("#ffffff");
-
+  const [dragId, setDragId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
   useEffect(() => { localStorage.setItem("notes_v1", JSON.stringify(notes)); }, [notes]);
 
   const addNote = () => {
@@ -454,7 +1116,18 @@ function NotesPanel() {
   };
 
   const deleteNote = (id) => setNotes(prev => prev.filter(n => n.id !== id));
-
+  const handleNoteDrop = () => {
+    if (dragId === null || dragOverId === null || dragId === dragOverId) return;
+    setNotes(prev => {
+      const arr = [...prev];
+      const from = arr.findIndex(n => n.id === dragId);
+      const to   = arr.findIndex(n => n.id === dragOverId);
+      const [item] = arr.splice(from, 1);
+      arr.splice(to, 0, item);
+      return arr;
+    });
+    setDragId(null); setDragOverId(null);
+  };
   const saveNoteEdit = () => {
     if (!editNoteText.trim() || !editingNote) return;
     setNotes(prev => prev.map(n => n.id === editingNote.id ? { ...n, text: editNoteText, color: editNoteColor } : n));
@@ -486,9 +1159,18 @@ function NotesPanel() {
         {notes.length === 0 ? (
           <div className="text-center py-10 text-white/30 text-sm">📝 Your notes will appear here</div>
         ) : (
-          notes.map(note => <NoteItem key={note.id} note={note} onDelete={deleteNote} onEdit={n => { setEditingNote(n); setEditNoteText(n.text); setEditNoteColor(n.color || "#ffffff"); }} />)
-        )}
-      </div>
+          notes.map(note => (
+            <NoteItem key={note.id} note={note}
+              onDelete={deleteNote}
+              onEdit={n => { setEditingNote(n); setEditNoteText(n.text); setEditNoteColor(n.color || "#ffffff"); }}
+              onDragStart={setDragId}
+              onDragOver={setDragOverId}
+              onDrop={handleNoteDrop}
+              isDragging={dragId === note.id}
+            />
+          ))
+      )}
+    </div>
 
       {editingNote && (
         <div onClick={e => e.target === e.currentTarget && setEditingNote(null)} className="fixed inset-0 flex items-center justify-center z-50 p-5" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}>
@@ -533,8 +1215,8 @@ export default function TodoApp() {
   const [editColor, setEditColor] = useState("#ffffff");
   const [dragId, setDragId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
-  const [goalPeriod, setGoalPeriod] = useState("all");
-  const [budgetPeriod, setBudgetPeriod] = useState("all");
+  const [goalPeriod, setGoalPeriod] = useState("month");
+  const [budgetPeriod, setBudgetPeriod] = useState("month");
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -590,6 +1272,8 @@ export default function TodoApp() {
     { key: "notes", label: "Notes", emoji: "📝" },
     { key: "goals", label: "Goals", emoji: "🎯" },
     { key: "budget", label: "Budget", emoji: "💰" },
+    { key: "habits", label: "Habits",   emoji: "🔁" },
+    { key: "gym",    label: "Gym",      emoji: "🏋️" },
   ];
 
   return (
@@ -598,6 +1282,12 @@ export default function TodoApp() {
       <style>{`
         @keyframes slideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes streakPop { 0% { transform: scale(1); } 40% { transform: scale(1.6); } 70% { transform: scale(0.9); } 100% { transform: scale(1); } }
+        @keyframes streakGlow { 0%,100% { text-shadow: none; } 50% { text-shadow: 0 0 12px #f59e0b, 0 0 24px #f59e0baa; } }
+        @keyframes shake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+        @keyframes confetti { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(-60px) rotate(360deg); opacity: 0; } }
+        @keyframes prPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(250,204,21,0.4); } 50% { box-shadow: 0 0 0 6px rgba(250,204,21,0); } }
+        @keyframes timerPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
         input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.5; cursor: pointer; }
         ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(34,197,94,0.3); border-radius: 999px; }
@@ -605,7 +1295,7 @@ export default function TodoApp() {
         button:focus { outline: none; }
       `}</style>
 
-      <header className="border-b border-white/8 px-5 md:px-7 py-4 flex justify-between items-center" style={{ background: "rgba(0,0,0,0.3)" }}>
+      <header className="border-b border-white/[0.06] px-5 md:px-7 py-4 flex justify-between items-center" style={{ background: "rgba(0,0,0,0.3)" }}>
         <div>
           <div className="text-xs font-semibold tracking-widest text-green-400 font-mono">{time}</div>
           <div className="text-sm text-white/40 mt-0.5">{formatDate()}</div>
@@ -613,7 +1303,7 @@ export default function TodoApp() {
       </header>
 
       <div className="flex flex-col md:flex-row min-h-[calc(100vh-65px)]">
-        <aside className="w-full md:w-56 flex-shrink-0 border-b md:border-b-0 md:border-r border-white/8 px-4 py-4" style={{ background: "rgba(0,0,0,0.15)" }}>
+        <aside className="w-full md:w-56 flex-shrink-0 border-b md:border-b-0 md:border-r border-white/[0.06] px-4 py-4" style={{ background: "rgba(0,0,0,0.15)" }}>
           <div className="text-[11px] font-semibold tracking-widest text-white/30 mb-3 hidden md:block">MENU</div>
           <nav className="flex flex-row md:flex-col gap-1.5 overflow-x-auto md:overflow-x-visible pb-1 md:pb-0" style={{ WebkitOverflowScrolling: "touch" }}>
             {menuItems.map(item => (
@@ -728,6 +1418,19 @@ export default function TodoApp() {
             <div className="max-w-2xl">
               <h1 className="text-2xl font-bold text-white mb-5">💰 Budget</h1>
               <BudgetPanel textColor={textColor} period={budgetPeriod} onPeriodChange={setBudgetPeriod} />
+            </div>
+          )}
+          {activePanel === "habits" && (
+            <div className="max-w-2xl">
+              <h1 className="text-2xl font-bold text-white mb-5">🔁 Habits</h1>
+              <HabitsPanel />
+            </div>
+          )}
+
+          {activePanel === "gym" && (
+            <div className="max-w-2xl">
+              <h1 className="text-2xl font-bold text-white mb-5">🏋️ Gym</h1>
+              <GymPanel />
             </div>
           )}
         </main>
